@@ -8,11 +8,12 @@ self-correction as first-class citizens, not afterthoughts.
 See [`chemsafety-copilot-prompt.md`](./chemsafety-copilot-prompt.md) for the full
 project brief and 5-week build order.
 
-## Status: Week 1 — Core RAG
+## Status: Week 4 — Failure gallery + deployment
 
-Building: CSB ingestion pipeline → dense retrieval → grounded generation → golden
-eval set → baseline RAGAS/retrieval metrics. Hybrid search, reranking, CRAG, and the
-agentic router land in later weeks.
+- Week 1: CSB ingestion pipeline, dense retrieval, grounded generation, golden eval set, baseline RAGAS/retrieval metrics
+- Week 2: hybrid (dense + BM25 + RRF) retrieval, cross-encoder reranker, CRAG grade/rewrite/retry loop
+- Week 3: agentic router (historical / chemical_property / calculation / comparative intents), PubChem tool, API 520 relief-valve sizing tool
+- Week 4 (in progress): stress-test failure gallery (see [`FAILURE_GALLERY.md`](./FAILURE_GALLERY.md)), FastAPI + Streamlit, Dockerized deployment
 
 ## Environment
 

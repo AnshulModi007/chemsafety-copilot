@@ -6,8 +6,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from src.agent.router import classify_intent, extract_psv_params  # noqa: E402
-from src.generation.generate import generate_with_crag  # noqa: E402
+from src.agent.router import RouteDecision, classify_intent, extract_psv_params  # noqa: E402
+from src.generation.crag import retrieve_with_crag  # noqa: E402
+from src.generation.generate import generate_from_hits, generate_with_crag  # noqa: E402
 from src.tools import calculations  # noqa: E402
 from src.tools.pubchem import CompoundNotFound, get_compound_properties  # noqa: E402
 
@@ -17,7 +18,7 @@ PE_DISCLAIMER = (
 )
 
 
-def _handle_historical_or_comparative(query: str) -> dict:
+def _handle_historical(query: str) -> dict:
     result = generate_with_crag(query)
     return {
         "answer": result["answer"],
@@ -26,6 +27,45 @@ def _handle_historical_or_comparative(query: str) -> dict:
             "retrieved_chunks": result["retrieved_chunks"],
             "crag_insufficient": result["crag_insufficient"],
             "crag_rewritten_query": result["crag_rewritten_query"],
+        },
+    }
+
+
+def _handle_comparative(query: str, sub_queries: list[str]) -> dict:
+    """A single retrieval call over a multi-entity question can starve one
+    entity's chunks out of the top-k pool entirely -- retrieve separately per
+    sub-question (one per incident/entity being compared) and merge, so the
+    generation step actually has grounding for every entity being compared
+    instead of silently filling gaps from outside knowledge (see failure gallery).
+    """
+    if len(sub_queries) < 2:
+        return _handle_historical(query)
+
+    merged_chunks: dict[str, dict] = {}
+    any_insufficient = False
+    for sub_query in sub_queries:
+        crag_result = retrieve_with_crag(sub_query)
+        any_insufficient = any_insufficient or crag_result["insufficient"]
+        for chunk in crag_result["used_chunks"]:
+            merged_chunks[chunk["chunk_id"]] = chunk
+
+    if not merged_chunks:
+        return {
+            "answer": (
+                "None of the incidents in this comparison had sufficient grounded evidence in the "
+                "retrieved report excerpts, even after per-incident retrieval and query rewriting."
+            ),
+            "data": {"citations": [], "retrieved_chunks": [], "crag_insufficient": True, "sub_queries": sub_queries},
+        }
+
+    result = generate_from_hits(query, list(merged_chunks.values()))
+    return {
+        "answer": result["answer"],
+        "data": {
+            "citations": result["citations"],
+            "retrieved_chunks": result["retrieved_chunks"],
+            "crag_insufficient": any_insufficient,
+            "sub_queries": sub_queries,
         },
     }
 
@@ -55,15 +95,16 @@ def _handle_chemical_property(chemical_name: str | None) -> dict:
 
 def _handle_calculation(query: str) -> dict:
     params = extract_psv_params(query)
-    if params.missing_required_fields:
+    missing = params.actually_missing_fields
+    if missing:
         return {
             "answer": (
                 "I need a few more values to size this relief valve: "
-                + ", ".join(params.missing_required_fields)
+                + ", ".join(missing)
                 + ". Please provide them (mass flow in lb/hr, molecular weight, relieving "
                 "temperature, and PSV set pressure)."
             ),
-            "data": {"missing_required_fields": params.missing_required_fields},
+            "data": {"missing_required_fields": missing},
         }
 
     kwargs = dict(
@@ -93,8 +134,10 @@ def _handle_calculation(query: str) -> dict:
 def ask(query: str) -> dict:
     decision = classify_intent(query)
 
-    if decision.intent in ("historical", "comparative"):
-        result = _handle_historical_or_comparative(query)
+    if decision.intent == "historical":
+        result = _handle_historical(query)
+    elif decision.intent == "comparative":
+        result = _handle_comparative(query, decision.sub_queries)
     elif decision.intent == "chemical_property":
         result = _handle_chemical_property(decision.chemical_name)
     elif decision.intent == "calculation":

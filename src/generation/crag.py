@@ -21,6 +21,12 @@ each excerpt's relevance to answering the question:
 - "ambiguous": topically related but doesn't clearly answer the question
 - "incorrect": not relevant to the question
 
+Important: if the question names or clearly implies a specific incident, facility, or company, an \
+excerpt about a DIFFERENT incident/facility/company is "incorrect" even if it discusses similar \
+hazards in general (explosions, chemical releases, root-cause findings, etc.) -- superficial topical \
+similarity (both are "explosions", both mention "root cause") is not relevance. Only grade "correct" \
+or "ambiguous" if the excerpt is actually about the incident/facility/company/chemical the question asks about.
+
 Respond with ONLY a JSON object matching this schema:
 {"grades": [{"chunk_index": <int>, "verdict": "correct"|"ambiguous"|"incorrect", "reason": "<brief reason>"}]}
 """
@@ -47,7 +53,14 @@ class RewrittenQuery(BaseModel):
 
 
 def grade_chunks(query: str, chunks: list[dict]) -> list[Grade]:
-    listing = "\n\n".join(f"[{i}] {c['text'][:600]}" for i, c in enumerate(chunks))
+    # Showing report_title/chemical up front turns "is this the same incident?"
+    # into a structural comparison instead of something the grader has to infer
+    # from prose alone -- the latter is where the small local model was prone
+    # to false-positive on superficial topical similarity (see failure gallery).
+    listing = "\n\n".join(
+        f'[{i}] (from report "{c["report_title"]}", chemical: {c["chemical"]}) {c["text"][:600]}'
+        for i, c in enumerate(chunks)
+    )
     response = ollama.chat(
         model=OLLAMA_MODEL,
         messages=[

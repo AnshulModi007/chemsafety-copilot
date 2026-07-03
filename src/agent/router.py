@@ -6,10 +6,16 @@ Intents:
   historical         -- precedent/root-cause questions -> RAG (+ CRAG)
   chemical_property   -- live property lookup for a named chemical -> PubChem
   calculation         -- engineering calc (PSV sizing) -> calculations tool
-  comparative         -- multi-incident/multi-hop questions -> RAG (+ CRAG),
-                         same path as historical; the distinction only matters
-                         for the generation prompt, which is free to synthesize
-                         across multiple retrieved reports either way
+  comparative         -- multi-incident/multi-hop questions -> per-entity RAG
+                         retrieval (see sub_queries below), merged before
+                         generation
+
+Note on "comparative": a single retrieval call over a multi-entity question can
+starve one entity's chunks out of the top-k pool entirely (observed failure:
+asking to compare two incidents retrieved chunks from only one of them, and the
+model filled in the other from outside knowledge instead of declining -- see
+failure gallery). So comparative queries get decomposed into one focused
+sub-query per entity and retrieved separately; see sub_queries on RouteDecision.
 """
 import sys
 from pathlib import Path
@@ -33,8 +39,13 @@ classification, etc.) of a named chemical, not tied to a specific incident
 
 If the intent is "chemical_property", extract the chemical's name into chemical_name.
 
+If the intent is "comparative", break the question into one focused, self-contained sub-question per \
+incident/entity being compared, into sub_queries (e.g. "Compare X and Y's root causes" -> \
+["What was the root cause of X?", "What was the root cause of Y?"]). Otherwise leave sub_queries empty.
+
 Respond with ONLY a JSON object matching this schema:
-{"intent": "historical"|"chemical_property"|"calculation"|"comparative", "chemical_name": "<name or null>", "reasoning": "<brief reason>"}
+{"intent": "historical"|"chemical_property"|"calculation"|"comparative", "chemical_name": "<name or null>", \
+"sub_queries": [<strings, only for comparative>], "reasoning": "<brief reason>"}
 """
 
 PSV_EXTRACTION_SYSTEM_PROMPT = """Extract pressure relief valve (PSV) sizing parameters for the API 520 \
@@ -63,6 +74,7 @@ Respond with ONLY a JSON object matching this schema:
 class RouteDecision(BaseModel):
     intent: Literal["historical", "chemical_property", "calculation", "comparative"]
     chemical_name: str | None = None
+    sub_queries: list[str] = []
     reasoning: str
 
 
@@ -94,6 +106,21 @@ class PSVExtraction(BaseModel):
         if self.set_pressure_unit == "psig":
             return self.set_pressure_value
         return self.set_pressure_value - 14.7  # psia -> psig
+
+    @property
+    def actually_missing_fields(self) -> list[str]:
+        """The model's own `missing_required_fields` self-report is unreliable
+        (observed: it omitted set_pressure_value when the question gave no
+        numbers at all). We already have the real extracted values, so check
+        completeness deterministically instead of trusting the model's list.
+        """
+        required = {
+            "mass_flow_lb_hr": self.mass_flow_lb_hr,
+            "molecular_weight": self.molecular_weight,
+            "relieving_temp_value": self.relieving_temp_value,
+            "set_pressure_value": self.set_pressure_value,
+        }
+        return [name for name, value in required.items() if value is None]
 
 
 def classify_intent(query: str) -> RouteDecision:
