@@ -1,0 +1,22 @@
+# FastAPI backend. CPU-only torch is installed explicitly first -- the default
+# PyPI torch wheel bundles CUDA (~2.5GB+), which is both unusable (no GPU on
+# free-tier hosting) and unnecessarily large for a container that only needs
+# to embed a few hundred short text chunks per query, not train anything.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-backend.txt .
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip install --no-cache-dir -r requirements-backend.txt
+
+COPY config.py .
+COPY app/ ./app/
+COPY src/ ./src/
+COPY data/manifest.json ./data/manifest.json
+COPY chroma_db/ ./chroma_db/
+
+ENV PORT=8000
+EXPOSE 8000
+
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]

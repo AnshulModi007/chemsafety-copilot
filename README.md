@@ -42,3 +42,23 @@ scripts\setup_env.ps1
 
 _Precision@5 omitted from the table above: with exactly one relevant chunk per golden question it's mathematically capped at 1/5, so it doesn't carry independent signal beyond Recall@5._
 
+## Deployment
+
+`Dockerfile.backend` (FastAPI) and `Dockerfile.frontend` (Streamlit) build independent,
+lean images -- see `docker-compose.yml` for local reference and `render.yaml` for a
+Render Blueprint. The corpus is pre-ingested and baked into `chroma_db/` at build time
+rather than re-ingested on container start.
+
+**Important constraint:** free-tier Render/Railway web services have no GPU and
+typically 512MB-1GB RAM, which cannot run the 4.9GB `llama3.1:8b` model locally in
+the container. `OLLAMA_HOST` must point at a reachable Ollama instance you control
+(e.g. a tunnel to this dev machine, or a paid instance with the model loaded) --
+Render can't provision that for you, which is why it has no default in `render.yaml`.
+
+For a deployment that's actually self-contained on free tiers, the LLM call sites
+(`src/agent/router.py`, `src/generation/crag.py`, `src/generation/generate.py` --
+all currently call `ollama.chat(...)`) would need to swap to a hosted free-tier API
+(e.g. Groq) behind the same interface. Not done here since it's a real behavioral
+change to already-verified code (would need the failure-gallery fixes re-verified
+against the new model) -- worth doing as a deliberate next step, not silently.
+

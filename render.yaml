@@ -1,0 +1,28 @@
+# Render Blueprint (https://render.com/docs/blueprint-spec). Deploy with
+# "New > Blueprint" pointed at this repo. OLLAMA_HOST has no default on
+# purpose -- see README Deployment notes: free-tier plans have no GPU and
+# not enough RAM for the 8B model, so it must point at a reachable Ollama
+# instance you control (not something Render can provision for you).
+services:
+  - type: web
+    name: chemsafety-copilot-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.backend
+    plan: free
+    envVars:
+      - key: OLLAMA_HOST
+        sync: false
+      - key: OLLAMA_MODEL
+        value: llama3.1:8b-instruct-q4_K_M
+
+  - type: web
+    name: chemsafety-copilot-frontend
+    runtime: docker
+    dockerfilePath: ./Dockerfile.frontend
+    plan: free
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: chemsafety-copilot-backend
+          property: hostport

@@ -1,0 +1,14 @@
+# What the FastAPI serving container actually imports (src/agent, src/retrieval,
+# src/generation, src/tools) -- ingestion/eval-only deps (pdfplumber, beautifulsoup4,
+# ragas, tqdm) are left out of the deployed image on purpose, the corpus is
+# pre-ingested and baked into the image as chroma_db/ instead.
+fastapi
+uvicorn[standard]
+pydantic
+python-dotenv
+requests
+chromadb
+sentence-transformers
+rank_bm25
+ollama
+numpy

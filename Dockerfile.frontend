@@ -1,0 +1,16 @@
+# Streamlit frontend. No ML deps -- it only talks to the backend over HTTP
+# (BACKEND_URL env var), so this image stays small and has nothing to do with
+# where/how the LLM or vector store run.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-frontend.txt .
+RUN pip install --no-cache-dir -r requirements-frontend.txt
+
+COPY app/streamlit_app.py ./app/streamlit_app.py
+
+ENV PORT=8501
+EXPOSE 8501
+
+CMD ["sh", "-c", "streamlit run app/streamlit_app.py --server.address 0.0.0.0 --server.port ${PORT}"]
