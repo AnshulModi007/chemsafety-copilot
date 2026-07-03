@@ -1,0 +1,13 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.env
+chroma_db/
+data/raw_pdfs/
+data/processed/
+.ollama-models/
+.hf-cache/
+.pip-cache/
+*.log
+.claude/

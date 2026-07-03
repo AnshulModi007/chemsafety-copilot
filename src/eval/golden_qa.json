@@ -1,0 +1,222 @@
+[
+  {
+    "id": "q001",
+    "question": "How many emergency responders reported to the hospital for a medical evaluation related to exposure to the smoke coming from the Arkema Crosby facility?",
+    "reference_answer": "21",
+    "source_report_id": "csb_20_arkema-inc-chemical-plant-fire",
+    "source_chunk_ids": [
+      "csb_20_arkema-inc-chemical-plant-fire__0026"
+    ],
+    "section": "3. INCIDENT DESCRIPTION"
+  },
+  {
+    "id": "q002",
+    "question": "What was the date of the toxic chemical release at the DuPont La Porte Chemical Facility?",
+    "reference_answer": "November 15, 2014",
+    "source_report_id": "csb_06_dupont-la-porte-facility-toxic-chemical-release",
+    "source_chunk_ids": [
+      "csb_06_dupont-la-porte-facility-toxic-chemical-release__0092"
+    ],
+    "section": "10 RECOMMENDATIONS"
+  },
+  {
+    "id": "q003",
+    "question": "How many people were killed in the explosion at CSI's production facility?",
+    "reference_answer": "Four",
+    "source_report_id": "csb_15_concept-sciences-hydroxylamine-explosion",
+    "source_chunk_ids": [
+      "csb_15_concept-sciences-hydroxylamine-explosion__0001"
+    ],
+    "section": "Background"
+  },
+  {
+    "id": "q004",
+    "question": "Who decided to bypass the safety devices during startup?",
+    "reference_answer": "The operators",
+    "source_report_id": "csb_05_bayer-cropscience-pesticide-waste-tank-explosion",
+    "source_chunk_ids": [
+      "csb_05_bayer-cropscience-pesticide-waste-tank-explosion__0017"
+    ],
+    "section": "2.0 Incident Description"
+  },
+  {
+    "id": "q005",
+    "question": "When did XL 10 react with 10% KOH to produce hydrogen gas, leading to the explosion?",
+    "reference_answer": "May 3, 2019",
+    "source_report_id": "csb_10_ab-specialty-silicones-llc",
+    "source_chunk_ids": [
+      "csb_10_ab-specialty-silicones-llc__0015"
+    ],
+    "section": "2 Incident Description"
+  },
+  {
+    "id": "q006",
+    "question": "What percentage of reactive incidents occurred in the chemical manufacturing industry?",
+    "reference_answer": "70 percent",
+    "source_report_id": "csb_14_t2-laboratories-inc-reactive-chemical-explosion",
+    "source_chunk_ids": [
+      "csb_14_t2-laboratories-inc-reactive-chemical-explosion__0015"
+    ],
+    "section": "7.0 Reactive Hazard Resources"
+  },
+  {
+    "id": "q007",
+    "question": "What should be implemented at FPC USA manufacturing facilities to minimize the likelihood and consequences of human error that could result in a catastrophic release?",
+    "reference_answer": "Chemical processes are designed to minimize the likelihood and consequences of human error.",
+    "source_report_id": "csb_16_formosa-plastics-vinyl-chloride-explosion",
+    "source_chunk_ids": [
+      "csb_16_formosa-plastics-vinyl-chloride-explosion__0019"
+    ],
+    "section": "8.0 Recommendations"
+  },
+  {
+    "id": "q008",
+    "question": "How long did it take for connections and structural members to break apart and for the broken pieces to fall to the ground in C Mill, the Multipurpose Building, F Mill, and the Boiler Room after the initial blast?",
+    "reference_answer": "three to five seconds",
+    "source_report_id": "csb_19_didion-milling-company-explosion-and-fire",
+    "source_chunk_ids": [
+      "csb_19_didion-milling-company-explosion-and-fire__0036"
+    ],
+    "section": "inset, Didion; background, CSB)"
+  },
+  {
+    "id": "q009",
+    "question": "What time did the Harcros CTMV arrive at the MGPI Atchison facility?",
+    "reference_answer": "At approximately 7:35 AM",
+    "source_report_id": "csb_07_mgpi-processing-inc-toxic-chemical-release",
+    "source_chunk_ids": [
+      "csb_07_mgpi-processing-inc-toxic-chemical-release__0007"
+    ],
+    "section": "3.0 INCIDENT DESCRIPTION"
+  },
+  {
+    "id": "q010",
+    "question": "What time did a Loy-Lange stationary engineer begin his normal start-up routine on Monday, April 3, 2017?",
+    "reference_answer": "about 6:00 a.m.",
+    "source_report_id": "csb_13_loy-lange-box-company-pressure-vessel-explosion",
+    "source_chunk_ids": [
+      "csb_13_loy-lange-box-company-pressure-vessel-explosion__0011"
+    ],
+    "section": "1.5 Incident Description"
+  },
+  {
+    "id": "q011",
+    "question": "What type of PPE was worn by Honeywell's emergency responders during the gasket failure?",
+    "reference_answer": "Level C PPE",
+    "source_report_id": "csb_18_honeywell-geismar-chlorine-and-hydrogen-fluoride-releases",
+    "source_chunk_ids": [
+      "csb_18_honeywell-geismar-chlorine-and-hydrogen-fluoride-releases__0045"
+    ],
+    "section": "5 SAFETY MANAGEMENT SYSTEMS IMPLEMENTATION AND"
+  },
+  {
+    "id": "q012",
+    "question": "Why did OSHA's PSM standard not apply to Watson Grinding's coating process?",
+    "reference_answer": "Because the amount of propylene stored on-site was below the threshold quantity of 10,000 pounds.",
+    "source_report_id": "csb_11_watson-grinding-fatal-explosion-and-fire",
+    "source_chunk_ids": [
+      "csb_11_watson-grinding-fatal-explosion-and-fire__0014"
+    ],
+    "section": "4 Safety Issues"
+  },
+  {
+    "id": "q013",
+    "question": "What is the maximum pressure recorded in a test cell when airborne combustible dust concentrates above the MEC and comes into contact with an ignition source?",
+    "reference_answer": "139 bar m/s",
+    "source_report_id": "csb_02_imperial-sugar-company-dust-explosion-and-fire",
+    "source_chunk_ids": [
+      "csb_02_imperial-sugar-company-dust-explosion-and-fire__0011"
+    ],
+    "section": "3.0 Incident Analysis"
+  },
+  {
+    "id": "q014",
+    "question": "On what date was a shelter-in-place order expanded to include the entire City of Deer Park?",
+    "reference_answer": "Sunday, March 17, 2019",
+    "source_report_id": "csb_12_intercontinental-terminals-company-itc-tank-fire",
+    "source_chunk_ids": [
+      "csb_12_intercontinental-terminals-company-itc-tank-fire__0018"
+    ],
+    "section": "2 INCIDENT DESCRIPTION"
+  },
+  {
+    "id": "q015",
+    "question": "At what time did an outside operator find an 18-inch puddle of diesel-like material on the refinery concrete pad?",
+    "reference_answer": "3:50 p.m. on August 6, 2012",
+    "source_report_id": "csb_03_chevron-richmond-refinery-fire",
+    "source_chunk_ids": [
+      "csb_03_chevron-richmond-refinery-fire__0020"
+    ],
+    "section": "3.0 The Incident"
+  },
+  {
+    "id": "q016",
+    "question": "What can cause a condensation-induced shock event in an ammonia system?",
+    "reference_answer": "The transition from high temperature and pressure to low temperature and pressure, particularly during and after the defrosting of evaporators with hot gaseous refrigerant.",
+    "source_report_id": "csb_17_millard-refrigerated-services-ammonia-release",
+    "source_chunk_ids": [
+      "csb_17_millard-refrigerated-services-ammonia-release__0007"
+    ],
+    "section": "3.0 HYDRAULIC SHOCK"
+  },
+  {
+    "id": "q017",
+    "question": "At what time did WVDEP inspectors arrive at the Freedom site?",
+    "reference_answer": "around 11:05 AM",
+    "source_report_id": "csb_08_freedom-industries-chemical-release",
+    "source_chunk_ids": [
+      "csb_08_freedom-industries-chemical-release__0012"
+    ],
+    "section": "2.1 Incident Description"
+  },
+  {
+    "id": "q018",
+    "question": "According to Section 7.7.3, which API documents were used for selecting construction materials for the Tesoro NHT heat exchangers and the Chevron piping circuit?",
+    "reference_answer": "API RP 941 and API RP 939-C Guidelines for Avoiding Sulfidation (Sulfidic) Corrosion Failures in Oil Refineries.",
+    "source_report_id": "csb_09_tesoro-anacortes-refinery-fatal-explosion-and-fire",
+    "source_chunk_ids": [
+      "csb_09_tesoro-anacortes-refinery-fatal-explosion-and-fire__0014"
+    ],
+    "section": "1.2.4 Regulatory Findings"
+  },
+  {
+    "id": "q019",
+    "question": "How many patients at the West Rest Haven nursing home sustained injuries in the explosion?",
+    "reference_answer": "72",
+    "source_report_id": "csb_01_west-fertilizer-explosion-and-fire",
+    "source_chunk_ids": [
+      "csb_01_west-fertilizer-explosion-and-fire__0024"
+    ],
+    "section": "3.0 Incident Description"
+  },
+  {
+    "id": "q020",
+    "question": "What action is proposed to be taken by OSHA regarding Process Safety Management (PSM) standard enforcement?",
+    "reference_answer": "Strengthen the planned comprehensive enforcement of the PSM standard through identification of high-risk facilities, comprehensive inspections, and training for inspectors.",
+    "source_report_id": "csb_04_bp-america-texas-city-refinery-explosion",
+    "source_chunk_ids": [
+      "csb_04_bp-america-texas-city-refinery-explosion__0099"
+    ],
+    "section": "13.0 RECOMMENDATIONS"
+  },
+  {
+    "id": "q021",
+    "question": "What was the primary cause of the rupture in the 4-sidecut piping?",
+    "reference_answer": "Sulfidation corrosion caused by the reaction between sulfur compounds and iron at temperatures ranging from 450\u00b0F to 1,000\u00b0F.",
+    "source_report_id": "csb_03_chevron-richmond-refinery-fire",
+    "source_chunk_ids": [
+      "csb_03_chevron-richmond-refinery-fire__0007"
+    ],
+    "section": "1.4.1 Technical Findings"
+  },
+  {
+    "id": "q022",
+    "question": "What was the estimated operating temperature range of the carbon steel equipment at the Tesoro refinery?",
+    "reference_answer": "up to 120 \u00b0F below the carbon steel Nelson curve, suggesting it likely operated above this temperature.",
+    "source_report_id": "csb_09_tesoro-anacortes-refinery-fatal-explosion-and-fire",
+    "source_chunk_ids": [
+      "csb_09_tesoro-anacortes-refinery-fatal-explosion-and-fire__0028"
+    ],
+    "section": "4.0 Technical Analysis"
+  }
+]

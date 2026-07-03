@@ -1,0 +1,17 @@
+pdfplumber
+beautifulsoup4
+rank_bm25
+sentence-transformers
+chromadb
+ollama
+langchain-ollama
+# Pinned: ragas>=0.3 has a broken top-level import against the current
+# langchain-community (chat_models.vertexai no longer resolves without the
+# unused langchain-google-vertexai extra). 0.2.15 doesn't hit that path.
+ragas==0.2.15
+pydantic
+python-dotenv
+requests
+tqdm
+numpy
+pandas

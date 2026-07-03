@@ -1,0 +1,222 @@
+[
+  {
+    "report_id": "csb_01_west-fertilizer-explosion-and-fire",
+    "title": "West Fertilizer Explosion And Fire",
+    "case_page_url": "https://www.csb.gov/west-fertilizer-explosion-and-fire-/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/West_Fertilizer_FINAL_Report_for_website_0223161.pdf?15628",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_01_west-fertilizer-explosion-and-fire.pdf",
+    "chemical": "ammonium nitrate",
+    "incident_type": "explosion",
+    "industry": "fertilizer storage",
+    "year": 2013
+  },
+  {
+    "report_id": "csb_02_imperial-sugar-company-dust-explosion-and-fire",
+    "title": "Imperial Sugar Company Dust Explosion And Fire",
+    "case_page_url": "https://www.csb.gov/imperial-sugar-company-dust-explosion-and-fire/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/Imperial_Sugar_Report_Final_updated.pdf?13902",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_02_imperial-sugar-company-dust-explosion-and-fire.pdf",
+    "chemical": "sugar dust",
+    "incident_type": "dust explosion",
+    "industry": "food processing",
+    "year": 2008
+  },
+  {
+    "report_id": "csb_03_chevron-richmond-refinery-fire",
+    "title": "Chevron Richmond Refinery Fire",
+    "case_page_url": "https://www.csb.gov/chevron-richmond-refinery-fire/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/Chevron_Final_Investigation_Report_2015-01-28.pdf?15396",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_03_chevron-richmond-refinery-fire.pdf",
+    "chemical": "hydrocarbon (sulfur corrosion)",
+    "incident_type": "fire",
+    "industry": "oil refining",
+    "year": 2012
+  },
+  {
+    "report_id": "csb_04_bp-america-texas-city-refinery-explosion",
+    "title": "Bp America Texas City Refinery Explosion",
+    "case_page_url": "https://www.csb.gov/bp-america-texas-city-refinery-explosion/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/CSBFinalReportBP.pdf?13841",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_04_bp-america-texas-city-refinery-explosion.pdf",
+    "chemical": "hydrocarbon (raffinate)",
+    "incident_type": "explosion",
+    "industry": "oil refining",
+    "year": 2005
+  },
+  {
+    "report_id": "csb_05_bayer-cropscience-pesticide-waste-tank-explosion",
+    "title": "Bayer Cropscience Pesticide Waste Tank Explosion",
+    "case_page_url": "https://www.csb.gov/bayer-cropscience-pesticide-waste-tank-explosion/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/Bayer_Report_Final.pdf?13959",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_05_bayer-cropscience-pesticide-waste-tank-explosion.pdf",
+    "chemical": "methomyl / pesticide waste",
+    "incident_type": "explosion",
+    "industry": "pesticide manufacturing",
+    "year": 2008
+  },
+  {
+    "report_id": "csb_06_dupont-la-porte-facility-toxic-chemical-release",
+    "title": "Dupont La Porte Facility Toxic Chemical Release",
+    "case_page_url": "https://www.csb.gov/dupont-la-porte-facility-toxic-chemical-release-/",
+    "pdf_url": "https://www.csb.gov/file.aspx?DocumentId=6124",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_06_dupont-la-porte-facility-toxic-chemical-release.pdf",
+    "chemical": "methyl mercaptan",
+    "incident_type": "toxic release",
+    "industry": "chemical manufacturing",
+    "year": 2006
+  },
+  {
+    "report_id": "csb_07_mgpi-processing-inc-toxic-chemical-release",
+    "title": "Mgpi Processing Inc Toxic Chemical Release",
+    "case_page_url": "https://www.csb.gov/mgpi-processing-inc-toxic-chemical-release-/",
+    "pdf_url": "https://www.csb.gov/file.aspx?DocumentId=6047",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_07_mgpi-processing-inc-toxic-chemical-release.pdf",
+    "chemical": "chlorine / sulfuric acid",
+    "incident_type": "toxic release",
+    "industry": "chemical manufacturing",
+    "year": 2016
+  },
+  {
+    "report_id": "csb_08_freedom-industries-chemical-release",
+    "title": "Freedom Industries Chemical Release",
+    "case_page_url": "https://www.csb.gov/freedom-industries-chemical-release-/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/FINAL_Freedom_Industries_Investigation_Report_(5-11-2017).pdf?15829",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_08_freedom-industries-chemical-release.pdf",
+    "chemical": "crude MCHM",
+    "incident_type": "toxic release",
+    "industry": "chemical storage",
+    "year": 2014
+  },
+  {
+    "report_id": "csb_09_tesoro-anacortes-refinery-fatal-explosion-and-fire",
+    "title": "Tesoro Anacortes Refinery Fatal Explosion And Fire",
+    "case_page_url": "https://www.csb.gov/tesoro-anacortes-refinery-fatal-explosion-and-fire-/",
+    "pdf_url": "https://www.csb.gov/assets/1/6/Tesoro_Anacortes_2014-May-01.pdf?15244",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_09_tesoro-anacortes-refinery-fatal-explosion-and-fire.pdf",
+    "chemical": "hydrogen / naphtha",
+    "incident_type": "explosion",
+    "industry": "oil refining",
+    "year": 2010
+  },
+  {
+    "report_id": "csb_10_ab-specialty-silicones-llc",
+    "title": "Ab Specialty Silicones Llc",
+    "case_page_url": "https://www.csb.gov/ab-specialty-silicones-llc/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/ab_specialty_investigation_report_final21.pdf?16886",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_10_ab-specialty-silicones-llc.pdf",
+    "chemical": "hydrogen / silicone",
+    "incident_type": "explosion",
+    "industry": "specialty chemicals",
+    "year": 2019
+  },
+  {
+    "report_id": "csb_11_watson-grinding-fatal-explosion-and-fire",
+    "title": "Watson Grinding Fatal Explosion And Fire",
+    "case_page_url": "https://www.csb.gov/watson-grinding-fatal-explosion-and-fire-/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/Watson_Final_Report_2023-06-29.pdf?16934",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_11_watson-grinding-fatal-explosion-and-fire.pdf",
+    "chemical": "propylene",
+    "incident_type": "explosion",
+    "industry": "manufacturing",
+    "year": 2020
+  },
+  {
+    "report_id": "csb_12_intercontinental-terminals-company-itc-tank-fire",
+    "title": "Intercontinental Terminals Company Itc Tank Fire",
+    "case_page_url": "https://www.csb.gov/intercontinental-terminals-company-itc-tank-fire/",
+    "pdf_url": "https://www.csb.gov/file.aspx?DocumentId=6230",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_12_intercontinental-terminals-company-itc-tank-fire.pdf",
+    "chemical": "naphtha / pyrolysis gasoline",
+    "incident_type": "fire",
+    "industry": "chemical storage terminal",
+    "year": 2019
+  },
+  {
+    "report_id": "csb_13_loy-lange-box-company-pressure-vessel-explosion",
+    "title": "Loy Lange Box Company Pressure Vessel Explosion",
+    "case_page_url": "https://www.csb.gov/loy-lange-box-company-pressure-vessel-explosion-/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/Loy_Lange_Box_Company_Report_-_Final.pdf?16806",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_13_loy-lange-box-company-pressure-vessel-explosion.pdf",
+    "chemical": "steam (pressure vessel)",
+    "incident_type": "explosion",
+    "industry": "box manufacturing",
+    "year": 2017
+  },
+  {
+    "report_id": "csb_14_t2-laboratories-inc-reactive-chemical-explosion",
+    "title": "T2 Laboratories Inc Reactive Chemical Explosion",
+    "case_page_url": "https://www.csb.gov/t2-laboratories-inc-reactive-chemical-explosion/",
+    "pdf_url": "https://www.csb.gov/file.aspx?DocumentId=5661",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_14_t2-laboratories-inc-reactive-chemical-explosion.pdf",
+    "chemical": "MCMT intermediate (runaway reaction)",
+    "incident_type": "explosion",
+    "industry": "chemical manufacturing",
+    "year": 2007
+  },
+  {
+    "report_id": "csb_15_concept-sciences-hydroxylamine-explosion",
+    "title": "Concept Sciences Hydroxylamine Explosion",
+    "case_page_url": "https://www.csb.gov/concept-sciences-hydroxylamine-explosion/",
+    "pdf_url": "https://www.csb.gov/file.aspx?DocumentId=5626",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_15_concept-sciences-hydroxylamine-explosion.pdf",
+    "chemical": "hydroxylamine",
+    "incident_type": "explosion",
+    "industry": "chemical manufacturing",
+    "year": 1999
+  },
+  {
+    "report_id": "csb_16_formosa-plastics-vinyl-chloride-explosion",
+    "title": "Formosa Plastics Vinyl Chloride Explosion",
+    "case_page_url": "https://www.csb.gov/formosa-plastics-vinyl-chloride-explosion/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/Formosa_IL_Report.pdf?13838",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_16_formosa-plastics-vinyl-chloride-explosion.pdf",
+    "chemical": "vinyl chloride",
+    "incident_type": "explosion",
+    "industry": "plastics manufacturing",
+    "year": 2004
+  },
+  {
+    "report_id": "csb_17_millard-refrigerated-services-ammonia-release",
+    "title": "Millard Refrigerated Services Ammonia Release",
+    "case_page_url": "https://www.csb.gov/millard-refrigerated-services-ammonia-release/",
+    "pdf_url": "https://www.csb.gov/file.aspx?DocumentId=5933",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_17_millard-refrigerated-services-ammonia-release.pdf",
+    "chemical": "anhydrous ammonia",
+    "incident_type": "toxic release",
+    "industry": "cold storage / food",
+    "year": 2010
+  },
+  {
+    "report_id": "csb_18_honeywell-geismar-chlorine-and-hydrogen-fluoride-releases",
+    "title": "Honeywell Geismar Chlorine And Hydrogen Fluoride Releases",
+    "case_page_url": "https://www.csb.gov/honeywell-geismar-chlorine-and-hydrogen-fluoride-releases/",
+    "pdf_url": "https://www.csb.gov/file.aspx?DocumentId=6295",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_18_honeywell-geismar-chlorine-and-hydrogen-fluoride-releases.pdf",
+    "chemical": "chlorine / hydrogen fluoride",
+    "incident_type": "toxic release",
+    "industry": "chemical manufacturing",
+    "year": 2020
+  },
+  {
+    "report_id": "csb_19_didion-milling-company-explosion-and-fire",
+    "title": "Didion Milling Company Explosion And Fire",
+    "case_page_url": "https://www.csb.gov/didion-milling-company-explosion-and-fire-/",
+    "pdf_url": "https://www.csb.gov/file.aspx?DocumentId=6240",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_19_didion-milling-company-explosion-and-fire.pdf",
+    "chemical": "corn dust",
+    "incident_type": "dust explosion",
+    "industry": "grain milling",
+    "year": 2017
+  },
+  {
+    "report_id": "csb_20_arkema-inc-chemical-plant-fire",
+    "title": "Arkema Inc Chemical Plant Fire",
+    "case_page_url": "https://www.csb.gov/arkema-inc-chemical-plant-fire-/",
+    "pdf_url": "https://www.csb.gov/assets/1/20/FINAL_Arkema_draft_report_2018-05-23.pdf?16272",
+    "pdf_path": "D:\\chem project\\data\\raw_pdfs\\csb_20_arkema-inc-chemical-plant-fire.pdf",
+    "chemical": "organic peroxides",
+    "incident_type": "fire",
+    "industry": "chemical manufacturing",
+    "year": 2017
+  }
+]
