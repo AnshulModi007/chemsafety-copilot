@@ -37,6 +37,17 @@ def _coefficient_c(k: float) -> float:
 
 
 def recommend_orifice(required_area_in2: float) -> dict | None:
+    """Smallest standard API 526 orifice whose area covers the requirement.
+
+    Args:
+        required_area_in2: required effective discharge area, in^2.
+
+    Returns:
+        {"designation", "area_in2"} for the smallest orifice at or above the
+        requirement, or None if it exceeds the largest standard letter (T) --
+        callers should treat None as "needs a custom orifice or multiple
+        valves in parallel", not an error.
+    """
     for letter, area in STANDARD_ORIFICES:
         if area >= required_area_in2:
             return {"designation": letter, "area_in2": area}
@@ -62,11 +73,40 @@ def size_psv_vapor(
     the standard textbook starting point when the specific chemical's real
     properties aren't known -- callers should override with PubChem/process
     data when available and note in the result which inputs were assumed.
+
+    Raises:
+        ValueError: for physically invalid inputs (non-positive flow, molecular
+            weight, temperature, or compressibility; k <= 1.0; a set pressure
+            that would leave zero or negative absolute upstream pressure; a
+            correction factor outside its valid (0, 1] range). This equation
+            has no meaningful answer for such inputs, so it fails loudly
+            rather than returning a silently-wrong area.
     """
     if k <= 1.0:
         raise ValueError("k (specific heat ratio) must be > 1.0")
+    if mass_flow_lb_hr <= 0:
+        raise ValueError("mass_flow_lb_hr must be > 0")
+    if molecular_weight <= 0:
+        raise ValueError("molecular_weight must be > 0")
+    if relieving_temp_rankine <= 0:
+        raise ValueError("relieving_temp_rankine must be > 0 (absolute temperature)")
+    if compressibility_z <= 0:
+        raise ValueError("compressibility_z must be > 0")
+    if not (0 < kd <= 1.0):
+        raise ValueError("kd must be in (0, 1]")
+    if not (0 < kb <= 1.0):
+        raise ValueError("kb must be in (0, 1]")
+    if not (0 < kc <= 1.0):
+        raise ValueError("kc must be in (0, 1]")
+    if overpressure_fraction < 0:
+        raise ValueError("overpressure_fraction must be >= 0")
 
     p1_psia = set_pressure_psig * (1.0 + overpressure_fraction) + atmospheric_psia
+    if p1_psia <= 0:
+        raise ValueError(
+            "set_pressure_psig gives a non-positive absolute upstream pressure -- "
+            "check units (this equation expects gauge pressure in psig)"
+        )
     c = _coefficient_c(k)
 
     required_area_in2 = (
@@ -75,6 +115,24 @@ def size_psv_vapor(
     )
 
     orifice = recommend_orifice(required_area_in2)
+
+    warnings: list[str] = []
+    if orifice is None:
+        warnings.append(
+            f"Required area ({required_area_in2:.3f} in^2) exceeds the largest standard API 526 "
+            "orifice (T, 26.0 in^2) -- this needs a custom orifice or multiple valves in parallel."
+        )
+    if mass_flow_lb_hr < 1.0:
+        warnings.append(
+            "Relieving rate is under 1 lb/hr -- verify this isn't a unit-conversion error before sizing."
+        )
+    if not (0.5 <= compressibility_z <= 1.1):
+        warnings.append(
+            f"Compressibility factor Z={compressibility_z:g} is well outside the range typical of "
+            "near-ideal gas relief. Highly non-ideal or supercritical fluids are not correctly sized "
+            "by this ideal/real-gas equation -- use a rigorous two-phase/flashing method "
+            "(e.g. API 520 Part I Annex C, or DIERS methodology) instead."
+        )
 
     return {
         "inputs": {
@@ -95,6 +153,7 @@ def size_psv_vapor(
         },
         "required_area_in2": required_area_in2,
         "recommended_orifice": orifice,
+        "warnings": warnings,
         "disclaimer": (
             "Preliminary sizing only, per API 520 Part I vapor/gas relief equation. "
             "Final PSV selection, backpressure/Kb verification, and stamped calculations "

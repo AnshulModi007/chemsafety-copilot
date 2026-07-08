@@ -2,6 +2,7 @@
 PUG View APIs -- used for questions about a specific chemical's properties
 rather than historical-incident questions (which go through RAG instead).
 """
+import logging
 import re
 import sys
 from pathlib import Path
@@ -11,6 +12,8 @@ import requests
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import PUBCHEM_BASE_URL, PUBCHEM_VIEW_URL  # noqa: E402
 
+logger = logging.getLogger(__name__)
+
 PROPERTIES = [
     "MolecularFormula", "MolecularWeight", "IUPACName", "CanonicalSMILES",
     "XLogP", "TPSA", "HBondDonorCount", "HBondAcceptorCount",
@@ -18,24 +21,56 @@ PROPERTIES = [
 
 
 class CompoundNotFound(Exception):
-    pass
+    """PubChem responded, but has no compound matching the given name."""
+
+
+class PubChemUnavailable(Exception):
+    """PubChem could not be reached, timed out, or returned an unexpected
+    (malformed / restructured) response -- distinct from CompoundNotFound so
+    callers can tell "no such chemical" from "the lookup itself failed"."""
 
 
 def _get_cid(name: str) -> int:
+    """Resolve a compound name to its PubChem CID.
+
+    Raises:
+        CompoundNotFound: PubChem has no match for this name.
+        PubChemUnavailable: the request timed out, PubChem is unreachable,
+            or the response wasn't in the expected shape.
+    """
     url = f"{PUBCHEM_BASE_URL}/compound/name/{requests.utils.quote(name)}/cids/JSON"
-    resp = requests.get(url, timeout=15)
+    try:
+        resp = requests.get(url, timeout=15)
+    except requests.exceptions.RequestException as e:
+        raise PubChemUnavailable(f"Could not reach PubChem: {e}") from e
     if resp.status_code == 404:
         raise CompoundNotFound(f"PubChem has no compound matching '{name}'")
-    resp.raise_for_status()
-    return resp.json()["IdentifierList"]["CID"][0]
+    try:
+        resp.raise_for_status()
+        return resp.json()["IdentifierList"]["CID"][0]
+    except requests.exceptions.HTTPError as e:
+        raise PubChemUnavailable(f"PubChem returned an error: {e}") from e
+    except (ValueError, KeyError, IndexError) as e:
+        raise PubChemUnavailable(f"PubChem returned an unexpected response shape: {e}") from e
 
 
 def _get_properties(cid: int) -> dict:
+    """Fetch the fixed PROPERTIES list for a CID.
+
+    Raises:
+        PubChemUnavailable: the request timed out, PubChem is unreachable,
+            or the response wasn't in the expected shape.
+    """
     prop_list = ",".join(PROPERTIES)
     url = f"{PUBCHEM_BASE_URL}/compound/cid/{cid}/property/{prop_list}/JSON"
-    resp = requests.get(url, timeout=15)
-    resp.raise_for_status()
-    return resp.json()["PropertyTable"]["Properties"][0]
+    try:
+        resp = requests.get(url, timeout=15)
+        resp.raise_for_status()
+        return resp.json()["PropertyTable"]["Properties"][0]
+    except requests.exceptions.RequestException as e:
+        raise PubChemUnavailable(f"Could not reach PubChem: {e}") from e
+    except (ValueError, KeyError, IndexError) as e:
+        raise PubChemUnavailable(f"PubChem returned an unexpected response shape: {e}") from e
 
 
 _H_CODE_RE = re.compile(r"^(H\d{3}[fi]?)\s*(?:\(([^)]+)\))?:\s*(.*)$")
@@ -52,13 +87,20 @@ def _get_ghs_hazards(cid: int) -> list[str]:
     entry per H-code (the highest-confidence variant, or the plain one if no
     cohort reports a percentage) rather than surfacing every repetition.
     Not every compound has a GHS Classification section at all, so an empty list
-    here means "not available from PubChem", not "no hazards".
+    here means "not available from PubChem", not "no hazards". This is
+    supplementary to the core property lookup, so network/timeout/malformed-
+    response failures fail soft to an empty list (logged) rather than raising --
+    a missing hazard row shouldn't block the rest of the answer.
     """
-    url = f"{PUBCHEM_VIEW_URL}/data/compound/{cid}/JSON?heading=GHS+Classification"
-    resp = requests.get(url, timeout=15)
-    if resp.status_code == 404:
+    try:
+        url = f"{PUBCHEM_VIEW_URL}/data/compound/{cid}/JSON?heading=GHS+Classification"
+        resp = requests.get(url, timeout=15)
+        if resp.status_code == 404:
+            return []
+        resp.raise_for_status()
+    except requests.exceptions.RequestException:
+        logger.warning("GHS hazard lookup failed for CID %s", cid, exc_info=True)
         return []
-    resp.raise_for_status()
 
     best_by_code: dict[str, tuple[float, str]] = {}
     try:
