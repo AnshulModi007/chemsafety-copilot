@@ -2,9 +2,14 @@ pdfplumber
 beautifulsoup4
 rank_bm25
 sentence-transformers
+# Explicit, not just a transitive dep of sentence-transformers' datasets
+# extra: src/retrieval/retriever.py imports this first on purpose, to win a
+# Windows DLL-load-order race against a CUDA torch build (see comment there).
+pyarrow
 chromadb
-ollama
-langchain-ollama
+groq
+langchain-groq
+tavily-python
 # Pinned: ragas>=0.3 has a broken top-level import against the current
 # langchain-community (chat_models.vertexai no longer resolves without the
 # unused langchain-google-vertexai extra). 0.2.15 doesn't hit that path.
@@ -18,3 +23,4 @@ pandas
 fastapi
 uvicorn[standard]
 streamlit
+pytest

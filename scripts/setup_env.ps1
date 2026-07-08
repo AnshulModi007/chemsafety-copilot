@@ -5,12 +5,11 @@ $ProjectRoot = Split-Path -Parent $PSScriptRoot
 
 # Redirect heavy caches to C:\ai-cache (D: is space-constrained, C: has more headroom)
 $CacheRoot = "C:\ai-cache"
-New-Item -ItemType Directory -Force -Path "$CacheRoot\hf-cache", "$CacheRoot\pip-cache", "$CacheRoot\ollama-models" | Out-Null
+New-Item -ItemType Directory -Force -Path "$CacheRoot\hf-cache", "$CacheRoot\pip-cache" | Out-Null
 
-# Persistent (system-level) env vars, since Ollama runs as its own background service
-setx OLLAMA_MODELS "$CacheRoot\ollama-models" | Out-Null
+# Persistent (system-level) env var for the HuggingFace cache (embeddings + reranker downloads)
 setx HF_HOME "$CacheRoot\hf-cache" | Out-Null
-Write-Output "Set persistent OLLAMA_MODELS and HF_HOME to $CacheRoot (restart Ollama / open a new terminal for this to take effect)."
+Write-Output "Set persistent HF_HOME to $CacheRoot\hf-cache (open a new terminal for this to take effect)."
 
 # .env for the Python process (mirrors the above + adds pip cache dir)
 if (-not (Test-Path "$ProjectRoot\.env")) {
@@ -28,15 +27,8 @@ if (-not (Test-Path "$ProjectRoot\.venv")) {
 & "$ProjectRoot\.venv\Scripts\python.exe" -m pip install --upgrade pip
 & "$ProjectRoot\.venv\Scripts\pip.exe" install -r "$ProjectRoot\requirements.txt"
 
-$ollama = Get-Command ollama -ErrorAction SilentlyContinue
-if (-not $ollama) {
-    Write-Warning "Ollama not found. Install it manually (winget install Ollama.Ollama or https://ollama.com/download), then re-run this script."
-    exit 1
+if (-not $env:GROQ_API_KEY) {
+    Write-Warning "GROQ_API_KEY is not set. Get a key at https://console.groq.com/keys and add it to .env before running the app."
 }
-
-Write-Output "Ollama found: $($ollama.Source)"
-Write-Output "Pulling llama3.1:8b-instruct-q4_K_M (this will use OLLAMA_MODELS=$env:OLLAMA_MODELS for THIS session; a fresh terminal/service restart is needed for the setx value to apply)..."
-$env:OLLAMA_MODELS = "$CacheRoot\ollama-models"
-ollama pull llama3.1:8b-instruct-q4_K_M
 
 Write-Output "Setup complete."
