@@ -6,8 +6,12 @@ __pycache__/
 chroma_db/
 data/raw_pdfs/
 data/processed/
-.ollama-models/
 .hf-cache/
 .pip-cache/
 *.log
 .claude/
+feedback_log.jsonl
+.pytest_cache/
+# Personal working doc used to compare against during early development --
+# superseded by README.md/FAILURE_GALLERY.md, not useful to a repo reader.
+RAG_System_Feature_Reference.docx
