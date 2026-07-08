@@ -1,7 +1,9 @@
 """Evaluation harness: retrieval metrics (Precision@k, Recall@k, MRR) computed
 directly against the golden set, and generation metrics (Faithfulness, Answer
-Relevancy) via RAGAS using the local Ollama model + bge-base embeddings as the
-judge -- no paid API involved.
+Relevancy, Context Precision, Context Recall) via RAGAS using the Groq-hosted
+judge model + bge-base embeddings as the judge. Context Precision/Recall need
+a ground-truth reference, which the golden set already provides
+(reference_answer).
 
 Run repeatedly as the retrieval/generation pipeline changes (hybrid search,
 reranking, CRAG, ...) to build a before/after metrics table rather than a
@@ -15,7 +17,7 @@ import types
 from pathlib import Path
 
 # ragas imports langchain_community.chat_models.vertexai purely for an
-# isinstance() check it never exercises with a local Ollama LLM; the real
+# isinstance() check it never exercises with the Groq judge LLM; the real
 # module needs the (heavy, unused) langchain-google-vertexai package. Stub
 # it out rather than installing Google Cloud SDK deps for nothing.
 _stub = types.ModuleType("langchain_community.chat_models.vertexai")
@@ -23,15 +25,15 @@ _stub.ChatVertexAI = type("ChatVertexAI", (), {})
 sys.modules["langchain_community.chat_models.vertexai"] = _stub
 
 from langchain_community.embeddings import HuggingFaceEmbeddings  # noqa: E402
-from langchain_ollama import ChatOllama  # noqa: E402
+from langchain_groq import ChatGroq  # noqa: E402
 from ragas import evaluate, EvaluationDataset, SingleTurnSample  # noqa: E402
 from ragas.embeddings import LangchainEmbeddingsWrapper  # noqa: E402
 from ragas.llms import LangchainLLMWrapper  # noqa: E402
-from ragas.metrics import answer_relevancy, faithfulness  # noqa: E402
+from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import (  # noqa: E402
-    GOLDEN_QA_PATH, BASELINE_METRICS_PATH, OLLAMA_MODEL, OLLAMA_HOST,
+    GOLDEN_QA_PATH, BASELINE_METRICS_PATH, GROQ_MODEL,
     EMBEDDING_MODEL, TOP_K, PROJECT_ROOT,
 )
 from src.retrieval.retriever import dense_retrieve, hybrid_retrieve, reranked_retrieve  # noqa: E402
@@ -75,6 +77,7 @@ def build_generation_dataset(golden_set: list[dict], retrieve_fn) -> EvaluationD
             user_input=item["question"],
             response=result["answer"],
             retrieved_contexts=[h["text"] for h in hits],
+            reference=item["reference_answer"],
         ))
     return EvaluationDataset(samples=samples)
 
@@ -108,6 +111,7 @@ def run_crag_eval(golden_set: list[dict], top_k: int) -> tuple[dict, EvaluationD
             user_input=item["question"],
             response=answer_text,
             retrieved_contexts=[h["text"] for h in used_hits] or ["(no chunks passed relevance grading)"],
+            reference=item["reference_answer"],
         ))
 
     n = len(golden_set)
@@ -139,7 +143,12 @@ def _update_readme(all_runs: dict) -> None:
     sep = "|---|" + "|".join("---" for _ in run_keys) + "|"
 
     def row(label: str, key: str) -> str:
-        return "| " + label + " | " + " | ".join(f"{all_runs[k][key]:.3f}" for k in run_keys) + " |"
+        # Older runs in baseline_metrics.json predate context_precision/recall
+        # -- show "--" for those instead of crashing on a missing key.
+        def fmt(k):
+            val = all_runs[k].get(key)
+            return f"{val:.3f}" if val is not None else "--"
+        return "| " + label + " | " + " | ".join(fmt(k) for k in run_keys) + " |"
 
     table = "\n".join([
         header,
@@ -148,6 +157,8 @@ def _update_readme(all_runs: dict) -> None:
         row("MRR", "mrr"),
         row("Faithfulness (RAGAS)", "faithfulness"),
         row("Answer Relevance (RAGAS)", "answer_relevancy"),
+        row("Context Precision (RAGAS)", "context_precision"),
+        row("Context Recall (RAGAS)", "context_recall"),
     ]) + "\n"
     note = (
         f"\n_Precision@{TOP_K} omitted from the table above: with exactly one "
@@ -190,17 +201,20 @@ def main():
         print("\nGenerating answers for RAGAS evaluation...")
         dataset = build_generation_dataset(golden_set, retrieve_fn)
 
-    judge_llm = LangchainLLMWrapper(ChatOllama(model=OLLAMA_MODEL, base_url=OLLAMA_HOST, num_ctx=8192))
+    judge_llm = LangchainLLMWrapper(ChatGroq(model=GROQ_MODEL))
     judge_embeddings = LangchainEmbeddingsWrapper(HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL))
 
-    print("\nRunning RAGAS faithfulness + answer_relevancy (local LLM judge, may take a while)...")
+    print("\nRunning RAGAS faithfulness + answer_relevancy + context_precision + "
+          "context_recall (Groq LLM judge, may take a while)...")
     result = evaluate(
         dataset,
-        metrics=[faithfulness, answer_relevancy],
+        metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
         llm=judge_llm,
         embeddings=judge_embeddings,
     )
-    ragas_scores = result.to_pandas()[["faithfulness", "answer_relevancy"]].mean().to_dict()
+    ragas_scores = result.to_pandas()[
+        ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
+    ].mean().to_dict()
 
     run_metrics = {**retrieval_scores, **ragas_scores}
     print(f"\nFinal metrics ({args.mode}):", json.dumps(run_metrics, indent=2))

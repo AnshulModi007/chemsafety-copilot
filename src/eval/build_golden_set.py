@@ -1,4 +1,4 @@
-"""Draft candidate golden-set QA pairs from ingested CSB report chunks via the local LLM.
+"""Draft candidate golden-set QA pairs from ingested CSB report chunks via Groq.
 
 Selects a diverse sample of chunks (aiming for one per report) and asks the
 model to write a question that chunk alone answers, plus a reference answer.
@@ -10,11 +10,13 @@ import random
 import sys
 from pathlib import Path
 
-import ollama
+from groq import Groq
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from config import PROCESSED_DIR, GOLDEN_QA_PATH, OLLAMA_MODEL  # noqa: E402
+from config import PROCESSED_DIR, GOLDEN_QA_PATH, GROQ_MODEL  # noqa: E402
+
+_client = Groq()
 
 TARGET_PAIRS = 22
 SKIP_SECTIONS = {"front matter"}
@@ -68,17 +70,16 @@ def pick_chunks(chunks: list[dict], target: int) -> list[dict]:
 
 
 def draft_qa(chunk: dict) -> QAPair | None:
-    response = ollama.chat(
-        model=OLLAMA_MODEL,
+    response = _client.chat.completions.create(
+        model=GROQ_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"Excerpt:\n\n{chunk['text']}"},
         ],
-        format=QAPair.model_json_schema(),
-        options={"num_ctx": 4096},
+        response_format={"type": "json_object"},
     )
     try:
-        return QAPair.model_validate_json(response["message"]["content"])
+        return QAPair.model_validate_json(response.choices[0].message.content)
     except Exception as e:
         print(f"  WARNING: failed to parse QA for {chunk['chunk_id']}: {e}")
         return None
