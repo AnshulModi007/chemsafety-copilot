@@ -87,20 +87,38 @@ def split_into_sections(pages: list[dict]) -> list[dict]:
     return sections
 
 
+# Parent-child retrieval: retrieval/reranking scores the small `text` window
+# (high precision), but generation gets the wider `parent_text` window (more
+# context) -- centered on the same position, so a chunk that scores well on a
+# narrow, precise match still hands the LLM enough surrounding context to
+# answer follow-up details the small window alone would cut off.
+PARENT_WINDOW_MULTIPLIER = 3
+
+
 def chunk_section(section: dict, chunk_words: int, overlap_words: int) -> list[dict]:
     words = section["words"]
     chunks = []
     step = max(chunk_words - overlap_words, 1)
+    parent_words = chunk_words * PARENT_WINDOW_MULTIPLIER
+
     for start in range(0, len(words), step):
         window = words[start:start + chunk_words]
         if not window:
             continue
         page_nums = [p for _, p in window]
+
+        parent_start = max(0, start - (parent_words - chunk_words) // 2)
+        parent_window = words[parent_start:parent_start + parent_words]
+        parent_page_nums = [p for _, p in parent_window] or page_nums
+
         chunks.append({
             "section": section["section"],
             "text": " ".join(w for w, _ in window),
             "page_start": min(page_nums),
             "page_end": max(page_nums),
+            "parent_text": " ".join(w for w, _ in parent_window),
+            "parent_page_start": min(parent_page_nums),
+            "parent_page_end": max(parent_page_nums),
         })
         if start + chunk_words >= len(words):
             break
