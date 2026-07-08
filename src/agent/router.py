@@ -1,5 +1,5 @@
 """Agentic router: classify a user query's intent and extract whatever
-structured arguments the downstream tool needs, via the same local-LLM
+structured arguments the downstream tool needs, via the same Groq
 structured-decoding pattern used by src/generation/crag.py.
 
 Intents:
@@ -9,6 +9,18 @@ Intents:
   comparative         -- multi-incident/multi-hop questions -> per-entity RAG
                          retrieval (see sub_queries below), merged before
                          generation
+  general_knowledge   -- general chemical-engineering concept/definition
+                         questions not tied to a specific incident, named
+                         chemical, or calculation -> ungrounded LLM answer,
+                         clearly labeled as such (see src/generation/generate.py's
+                         generate_general_knowledge)
+
+Note on "general_knowledge": added after observing that questions like "what
+is a tray tower" or "what is mass transfer" have no good home in the other
+four intents -- they're not about a specific chemical's properties, so the
+router was forcing them into "chemical_property", which then correctly
+found no chemical name to look up and returned a confusing "couldn't tell
+which chemical" refusal instead of actually answering the question.
 
 Note on "comparative": a single retrieval call over a multi-entity question can
 starve one entity's chunks out of the top-k pool entirely (observed failure:
@@ -19,13 +31,40 @@ sub-query per entity and retrieved separately; see sub_queries on RouteDecision.
 """
 import sys
 from pathlib import Path
-from typing import Literal
+from typing import Literal, TypeVar
 
-import ollama
-from pydantic import BaseModel
+from groq import Groq
+from pydantic import BaseModel, ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from config import OLLAMA_MODEL  # noqa: E402
+from config import GROQ_FAST_MODEL  # noqa: E402
+
+_client = Groq()
+
+_T = TypeVar("_T", bound=BaseModel)
+
+REFORMULATE_SYSTEM_PROMPT = """You resolve follow-up questions into standalone questions for \
+ChemSafety Copilot, an assistant over U.S. Chemical Safety Board (CSB) incident reports, live \
+chemical-property lookups, and engineering calculations.
+
+Given recent conversation history and a new user message, rewrite the new message into a fully \
+self-contained question that makes sense with NO prior context -- resolve pronouns ("it", "that", \
+"this incident") and implicit references ("what about its pricing", "and the other one") into the \
+actual incident/chemical/entity named earlier in the conversation.
+
+If the new message ALSO includes an instruction about how to format or how long the answer should be \
+(e.g. "give answer in one word", "briefly", "just a sentence", "in bullet points"), keep that \
+instruction attached to the rewritten standalone question -- do not drop it. E.g. "give answer in one \
+word or sentence" following a question about a tray tower's application should resolve to something \
+like "What is the application of a tray tower? Answer in one word or a single sentence." not just \
+"What is the application of a tray tower?".
+
+If the new message is already self-contained and doesn't depend on anything said earlier, return it \
+completely unchanged.
+
+Respond with ONLY a JSON object matching this schema:
+{"resolved_query": "<standalone question>"}
+"""
 
 ROUTER_SYSTEM_PROMPT = """You are the intent router for ChemSafety Copilot, an assistant over U.S. \
 Chemical Safety Board (CSB) incident reports plus live chemical-data and engineering-calculation tools.
@@ -36,6 +75,11 @@ Classify the user's question into exactly one intent:
 classification, etc.) of a named chemical, not tied to a specific incident
 - "calculation": asks to size or calculate an engineering quantity (e.g. relief valve / PSV sizing)
 - "comparative": asks to compare, contrast, or find commonalities across multiple incidents
+- "general_knowledge": asks about a general chemical-engineering concept, term, or definition (e.g. \
+"what is a tray tower", "what is mass transfer", "explain distillation") that is NOT about a specific \
+named chemical's properties, a specific past incident, a calculation, or a comparison -- use this \
+whenever none of the other four intents actually fit, rather than forcing it into "chemical_property" \
+just because the topic is chemistry-related.
 
 If the intent is "chemical_property", extract the chemical's name into chemical_name.
 
@@ -44,8 +88,9 @@ incident/entity being compared, into sub_queries (e.g. "Compare X and Y's root c
 ["What was the root cause of X?", "What was the root cause of Y?"]). Otherwise leave sub_queries empty.
 
 Respond with ONLY a JSON object matching this schema:
-{"intent": "historical"|"chemical_property"|"calculation"|"comparative", "chemical_name": "<name or null>", \
-"sub_queries": [<strings, only for comparative>], "reasoning": "<brief reason>"}
+{"intent": "historical"|"chemical_property"|"calculation"|"comparative"|"general_knowledge", \
+"chemical_name": "<name or null>", "sub_queries": [<strings, only for comparative>], \
+"reasoning": "<brief reason>"}
 """
 
 PSV_EXTRACTION_SYSTEM_PROMPT = """Extract pressure relief valve (PSV) sizing parameters for the API 520 \
@@ -71,11 +116,19 @@ Respond with ONLY a JSON object matching this schema:
 """
 
 
+class ResolvedQuery(BaseModel):
+    resolved_query: str
+
+
 class RouteDecision(BaseModel):
-    intent: Literal["historical", "chemical_property", "calculation", "comparative"]
+    intent: Literal["historical", "chemical_property", "calculation", "comparative", "general_knowledge"]
     chemical_name: str | None = None
     sub_queries: list[str] = []
-    reasoning: str
+    # Defaults to "" rather than being required: observed in practice that the
+    # fast model occasionally omits this free-text field even though intent
+    # classification itself succeeded -- losing the explanation isn't worth
+    # crashing the whole request over.
+    reasoning: str = ""
 
 
 class PSVExtraction(BaseModel):
@@ -123,30 +176,69 @@ class PSVExtraction(BaseModel):
         return [name for name, value in required.items() if value is None]
 
 
+def _structured_call(system_prompt: str, user_content: str, schema: type[_T]) -> _T:
+    """Call GROQ_FAST_MODEL in JSON mode and validate the response against
+    `schema`, retrying once on a malformed/incomplete response before giving
+    up -- observed in practice that this small, fast model occasionally
+    returns JSON missing a required field on an otherwise-valid call, and a
+    single retry reliably recovers.
+
+    Raises:
+        pydantic.ValidationError: if both attempts return an invalid shape.
+    """
+    last_error: ValidationError | None = None
+    for _ in range(2):
+        response = _client.chat.completions.create(
+            model=GROQ_FAST_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            response_format={"type": "json_object"},
+        )
+        try:
+            return schema.model_validate_json(response.choices[0].message.content)
+        except ValidationError as e:
+            last_error = e
+    raise last_error
+
+
+def reformulate_query(query: str, history: list[dict]) -> str:
+    """Resolve a follow-up ("what about its pricing?") into a standalone
+    question using the last few conversation turns, before routing/retrieval
+    ever see it. A no-op (returns query unchanged) when there's no history --
+    skips the extra LLM call for the common single-turn case.
+    """
+    if not history:
+        return query
+
+    history_text = "\n".join(f"{h['role']}: {h['content']}" for h in history[-6:])
+    try:
+        result = _structured_call(
+            REFORMULATE_SYSTEM_PROMPT,
+            f"Conversation history:\n{history_text}\n\nNew message: {query}",
+            ResolvedQuery,
+        )
+    except ValidationError:
+        return query  # fail soft -- treat the raw message as already self-contained
+    return result.resolved_query
+
+
 def classify_intent(query: str) -> RouteDecision:
-    response = ollama.chat(
-        model=OLLAMA_MODEL,
-        messages=[
-            {"role": "system", "content": ROUTER_SYSTEM_PROMPT},
-            {"role": "user", "content": query},
-        ],
-        format=RouteDecision.model_json_schema(),
-        options={"num_ctx": 4096},
-    )
-    return RouteDecision.model_validate_json(response["message"]["content"])
+    """Classify a (resolved) query's intent via the fast model.
+
+    Returns:
+        A validated RouteDecision. Raises pydantic.ValidationError if the
+        model's response is malformed on both the initial call and the retry
+        (see _structured_call) -- there's no safe default intent to fall
+        back to, so this propagates to the caller.
+    """
+    return _structured_call(ROUTER_SYSTEM_PROMPT, query, RouteDecision)
 
 
 def extract_psv_params(query: str) -> PSVExtraction:
-    response = ollama.chat(
-        model=OLLAMA_MODEL,
-        messages=[
-            {"role": "system", "content": PSV_EXTRACTION_SYSTEM_PROMPT},
-            {"role": "user", "content": query},
-        ],
-        format=PSVExtraction.model_json_schema(),
-        options={"num_ctx": 4096},
-    )
-    return PSVExtraction.model_validate_json(response["message"]["content"])
+    """Extract PSV sizing parameters from a calculation query via the fast model."""
+    return _structured_call(PSV_EXTRACTION_SYSTEM_PROMPT, query, PSVExtraction)
 
 
 if __name__ == "__main__":
