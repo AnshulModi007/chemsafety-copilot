@@ -7,6 +7,11 @@ sentence-transformers
 # Windows DLL-load-order race against a CUDA torch build (see comment there).
 pyarrow
 chromadb
+# Explicit, not just a transitive dep of sentence-transformers: src/retrieval/
+# retriever.py calls this directly for the HF Inference API embedding backend
+# (EMBEDDING_BACKEND=api), which is meant to work even without sentence-transformers
+# imported at all.
+huggingface_hub
 groq
 langchain-groq
 tavily-python

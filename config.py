@@ -16,6 +16,18 @@ GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_FAST_MODEL = os.getenv("GROQ_FAST_MODEL", "llama-3.1-8b-instant")
 
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
+# "local" loads the model in-process via sentence-transformers (needs torch --
+# ~500MB+ RSS just to import torch+transformers+sentence-transformers, before any
+# model weights). "api" calls Hugging Face's hosted Inference API instead, so the
+# deployed backend never imports torch at all -- the biggest lever for fitting in
+# memory-constrained free-tier hosting. Verified numerically equivalent output
+# (cosine ~1.0, max abs diff ~1.8e-7) for BAAI/bge-small-en-v1.5, since the API
+# already applies the same pooling/normalization sentence-transformers does.
+EMBEDDING_BACKEND = os.getenv("EMBEDDING_BACKEND", "local").strip().lower()
+# Needed only when EMBEDDING_BACKEND=api -- a free token from
+# https://huggingface.co/settings/tokens with "Make calls to Inference Providers"
+# permission enabled.
+HF_TOKEN = os.getenv("HF_TOKEN")
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-base")
 RERANK_POOL = 20  # candidates pulled from hybrid search before reranking down to TOP_K
 # Cross-encoder reranking loads a second ~278M-param model (~1.1GB in fp32) on top

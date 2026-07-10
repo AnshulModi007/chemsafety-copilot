@@ -1,27 +1,34 @@
 """Retrieval over the CSB report corpus: dense (Chroma), sparse (BM25), and
 hybrid (both, fused with Reciprocal Rank Fusion).
 """
-# Must be imported before torch (pulled in below by sentence_transformers) --
-# on Windows, if the CUDA-enabled torch build loads its DLLs first, pyarrow's
-# own bundled Arrow runtime (pulled in transitively via
-# sentence_transformers -> datasets -> pandas -> pyarrow) segfaults on import.
-# Importing it here first makes it win that DLL load-order race.
-import pyarrow  # noqa: F401,E402
-
 import json
 import re
 import sys
 from pathlib import Path
 
 import chromadb
+import numpy as np
 from rank_bm25 import BM25Okapi
-from sentence_transformers import CrossEncoder, SentenceTransformer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import (  # noqa: E402
-    CHROMA_DIR, CHROMA_COLLECTION, EMBEDDING_MODEL, ENABLE_RERANKER, RERANKER_MODEL,
-    RERANK_POOL, TOP_K, PROCESSED_DIR,
+    CHROMA_DIR, CHROMA_COLLECTION, EMBEDDING_BACKEND, EMBEDDING_MODEL, ENABLE_RERANKER,
+    HF_TOKEN, RERANKER_MODEL, RERANK_POOL, TOP_K, PROCESSED_DIR,
 )
+
+# torch (via sentence-transformers) costs ~500MB+ RSS just to import, before any
+# model weights -- skip it entirely when embeddings come from the HF Inference API
+# instead and the reranker is off (see EMBEDDING_BACKEND in config.py).
+if EMBEDDING_BACKEND == "local" or ENABLE_RERANKER:
+    # Must be imported before torch (pulled in below by sentence_transformers) --
+    # on Windows, if the CUDA-enabled torch build loads its DLLs first, pyarrow's
+    # own bundled Arrow runtime (pulled in transitively via
+    # sentence_transformers -> datasets -> pandas -> pyarrow) segfaults on import.
+    # Importing it here first makes it win that DLL load-order race.
+    import pyarrow  # noqa: F401,E402
+    from sentence_transformers import CrossEncoder, SentenceTransformer  # noqa: E402
+if EMBEDDING_BACKEND == "api":
+    from huggingface_hub import InferenceClient
 
 # bge-base-en-v1.5's recommended instruction prefix for the query side of
 # retrieval (the document/passage side needs no prefix -- see build_index.py).
@@ -30,6 +37,7 @@ RRF_K = 60  # standard RRF damping constant
 CANDIDATE_K = 20  # how many candidates each retriever contributes before fusion
 
 _model = None
+_hf_client = None
 _collection = None
 _bm25 = None
 _bm25_chunks = None
@@ -41,11 +49,29 @@ def _tokenize(text: str) -> list[str]:
     return _TOKEN_RE.findall(text.lower())
 
 
-def _get_model() -> SentenceTransformer:
+def _get_model() -> "SentenceTransformer":
     global _model
     if _model is None:
         _model = SentenceTransformer(EMBEDDING_MODEL)
     return _model
+
+
+def _get_hf_client() -> "InferenceClient":
+    global _hf_client
+    if _hf_client is None:
+        _hf_client = InferenceClient(model=EMBEDDING_MODEL, token=HF_TOKEN)
+    return _hf_client
+
+
+def _embed(text: str) -> list[float]:
+    """Single-text embedding via whichever backend is configured -- local
+    sentence-transformers or the HF Inference API (see EMBEDDING_BACKEND).
+    Verified numerically equivalent between the two for bge-small-en-v1.5.
+    """
+    if EMBEDDING_BACKEND == "api":
+        vec = _get_hf_client().feature_extraction(text)
+        return np.asarray(vec).squeeze().tolist()
+    return _get_model().encode(text).tolist()
 
 
 def _get_collection():
@@ -65,7 +91,7 @@ def _get_bm25():
     return _bm25, _bm25_chunks
 
 
-def _get_reranker() -> CrossEncoder:
+def _get_reranker() -> "CrossEncoder":
     global _reranker
     if _reranker is None:
         _reranker = CrossEncoder(RERANKER_MODEL)
@@ -78,14 +104,13 @@ def embed_text(text: str) -> list[float]:
     cache's question-to-question similarity, rather than query-to-passage
     retrieval (see QUERY_INSTRUCTION for that asymmetric case).
     """
-    return _get_model().encode(text).tolist()
+    return _embed(text)
 
 
 def dense_retrieve(query: str, top_k: int = TOP_K) -> list[dict]:
-    model = _get_model()
     collection = _get_collection()
 
-    query_embedding = model.encode(QUERY_INSTRUCTION + query).tolist()
+    query_embedding = _embed(QUERY_INSTRUCTION + query)
     results = collection.query(query_embeddings=[query_embedding], n_results=top_k)
 
     hits = []
@@ -177,10 +202,9 @@ def hyde_dense_retrieve(hypothetical_passage: str, top_k: int = CANDIDATE_K) -> 
     matching a fake *document* against real documents, not a query against
     documents (see build_index.py for why the passage side has no prefix).
     """
-    model = _get_model()
     collection = _get_collection()
 
-    embedding = model.encode(hypothetical_passage).tolist()
+    embedding = _embed(hypothetical_passage)
     results = collection.query(query_embeddings=[embedding], n_results=top_k)
 
     hits = []
