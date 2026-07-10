@@ -19,7 +19,7 @@ from sentence_transformers import CrossEncoder, SentenceTransformer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import (  # noqa: E402
-    CHROMA_DIR, CHROMA_COLLECTION, EMBEDDING_MODEL, RERANKER_MODEL,
+    CHROMA_DIR, CHROMA_COLLECTION, EMBEDDING_MODEL, ENABLE_RERANKER, RERANKER_MODEL,
     RERANK_POOL, TOP_K, PROCESSED_DIR,
 )
 
@@ -152,6 +152,9 @@ def hybrid_retrieve(query: str, top_k: int = TOP_K, candidate_k: int = CANDIDATE
 def _rerank(query: str, candidates: list[dict], top_k: int) -> list[dict]:
     if not candidates:
         return []
+    if not ENABLE_RERANKER:
+        # No cross-encoder pass -- keep RRF-fused hybrid order, just truncated.
+        return candidates[:top_k]
     reranker = _get_reranker()
     pairs = [(query, c["text"]) for c in candidates]
     scores = reranker.predict(pairs)

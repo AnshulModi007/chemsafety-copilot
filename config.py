@@ -18,6 +18,13 @@ GROQ_FAST_MODEL = os.getenv("GROQ_FAST_MODEL", "llama-3.1-8b-instant")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
 RERANKER_MODEL = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-base")
 RERANK_POOL = 20  # candidates pulled from hybrid search before reranking down to TOP_K
+# Cross-encoder reranking loads a second ~278M-param model (~1.1GB in fp32) on top
+# of the embedder -- too much for memory-constrained free-tier hosting. When off,
+# retrieval falls back to RRF-fused hybrid order with no cross-encoder pass, and
+# CRAG's high-confidence fast path never fires (no rerank_score to gate on), so
+# every query takes the LLM-graded path instead -- still correct, just without
+# that latency shortcut.
+ENABLE_RERANKER = os.getenv("ENABLE_RERANKER", "true").strip().lower() not in ("false", "0", "")
 
 # Web search fallback (used only when the CSB corpus has no confident answer).
 # No default on purpose -- get a free key at https://tavily.com. If unset, the
