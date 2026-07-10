@@ -1,0 +1,28 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.git/
+.claude/
+.pytest_cache/
+.env
+*.log
+feedback_log.jsonl
+
+# Only needed for offline re-ingestion, not for serving queries against the
+# already-built index -- keeps the image ~100MB smaller.
+data/raw_pdfs/
+
+# Full-size bge-base index used for local dev -- the Dockerfile copies from
+# chroma_db_deploy/ (bge-small) instead, so this never needs to enter the
+# build context at all.
+chroma_db/
+
+tests/
+scripts/
+app/streamlit_app.py
+RAG_System_Feature_Reference.docx
+chemsafety-copilot-prompt.md
+FAILURE_GALLERY.md
+README.md
+baseline_metrics.json
