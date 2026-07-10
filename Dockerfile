@@ -8,16 +8,17 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    HF_HOME=/app/.hf-cache \
     ANONYMIZED_TELEMETRY=False \
     EMBEDDING_MODEL=BAAI/bge-small-en-v1.5 \
+    EMBEDDING_BACKEND=api \
     ENABLE_RERANKER=false
 
 COPY requirements.txt .
 # CPU-only torch first -- plain `pip install torch` on Linux pulls the CUDA-enabled
 # build (several GB of bundled nvidia-* packages), pointless on a host with no GPU.
-# Installing this first satisfies requirements.txt's torch dependency so the later
-# install doesn't pull the GPU variant.
+# sentence-transformers (needed for local dev / EMBEDDING_BACKEND=local) hard-
+# requires torch to be installed on disk, so this stays even though the app never
+# imports torch at runtime in this image's config -- see the note below.
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -32,9 +33,13 @@ COPY data/processed/ data/processed/
 # local dev is NOT what ships in this image.
 COPY chroma_db_deploy/ chroma_db/
 
-# No persistent volume on most free hosting tiers -- the embedding model cache
-# re-downloads into this dir on cold start/restart.
-RUN mkdir -p /app/.hf-cache && chown -R user:user /app
+# With EMBEDDING_BACKEND=api and ENABLE_RERANKER=false above, src/retrieval/
+# retriever.py never actually imports torch/sentence-transformers at runtime --
+# embeddings come from the HF Inference API call instead (see config.py).
+# Importing torch alone costs ~500MB+ RSS, most of a 512MB free-tier budget;
+# skipping the import (not just the install) is what makes this fit. HF_TOKEN
+# must be set as a secret at runtime, never baked into the image.
+RUN chown -R user:user /app
 
 USER user
 
