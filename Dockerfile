@@ -14,6 +14,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ENABLE_RERANKER=false
 
 COPY requirements.txt .
+# CPU-only torch first -- plain `pip install torch` on Linux pulls the CUDA-enabled
+# build (several GB of bundled nvidia-* packages), pointless on a host with no GPU.
+# Installing this first satisfies requirements.txt's torch dependency so the later
+# install doesn't pull the GPU variant.
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ app/
