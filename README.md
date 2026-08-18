@@ -93,7 +93,188 @@ extraction, the diagram-necessity decision) is intentionally out of scope for th
 offline suite; those are covered by the failure-gallery-driven manual verification
 instead.
 
-## Running locally
+## Running on Groq's free tier
+
+The free tier allows **8,000 tokens per minute, per model**, and that ceiling
+applies to each individual request. Parent-child retrieval hands generation the
+wide parent window for each of `TOP_K=5` chunks -- about 55k characters, or
+~13.7k tokens -- so every grounded answer used to fail outright with
+`413 Request too large`. The faithfulness check re-reads the same context, so it
+failed for the same reason.
+
+`GENERATION_CONTEXT_CHAR_BUDGET` (default 20,000 chars, ~5k tokens) bounds what a
+single generation call receives. It degrades in three steps, giving up quality
+only when it must: full parent windows when they all fit, then the narrower
+retrieval windows that were actually scored as relevant, then proportional
+truncation with an explicit `[... excerpt truncated ...]` marker. **Chunks are
+never dropped** -- losing one silently removes a citable source, which is worse
+than shortening all of them.
+
+This budgets *generation only*. Retrieval still returns `TOP_K=5`, so the
+reported Recall@5 and MRR figures -- which are retrieval metrics -- are
+unaffected. Measured after the change: the largest single request fell from
+~13,970 to **4,283 tokens**, and grounded answers now return with citations, a
+passing faithfulness check, and a generated bowtie diagram.
+
+The router, CRAG grader, query expansion, faithfulness check, and diagram
+extraction all run on `GROQ_FAST_MODEL`, while only final generation uses
+`GROQ_MODEL` -- and the two draw on separate token buckets, which is what makes a
+7-call query fit. Raise the budget on a paid tier; wider context is strictly
+better for answer quality when the cap allows.
+
+## Production observability (`src/telemetry/`)
+
+Every query writes one structured telemetry row to a dedicated SQLite database
+(`metrics.db`, never mixed into the Chroma store), exposed as read-only aggregate
+endpoints and an Analytics page in the React app. The point is to be able to
+answer *how fast, how expensive, how good, and where does it fail* about a system
+running in production -- not to keep a log file.
+
+<!-- ![Analytics dashboard](docs/analytics.png) -->
+_Screenshot placeholder -- add `docs/analytics.png`._
+
+### What is captured
+
+Per query: a generated id and UTC timestamp, total latency, **per-stage latency**
+(reformulation, routing, cache lookup/store, expansion, retrieval, CRAG grading,
+generation, faithfulness, web search, diagram, tool call), every model used with
+input/output token counts, a computed cost, the routed intent, the LLM-as-Judge
+faithfulness verdict and unsupported-claim count, retrieval confidence and top
+rerank score, whether the CRAG retry fired, whether the Tavily fallback fired,
+whether it was a cache hit, and on failure a categorised error
+(`llm_provider` / `llm_output_invalid` / `retrieval` / `external_tool` /
+`validation` / `internal`) with the exception *type* only.
+
+Per LLM call, in its own table: model, pipeline stage, tokens, cost, client-side
+latency, and Groq's own server-side inference time -- so network overhead can be
+separated from model time. A single grounded query fans out to 8-12 Groq calls
+across seven modules, so cost is always a sum over these rows.
+
+### Privacy
+
+`LOG_QUERY_TEXT` (default `true`) controls whether raw query text is persisted at
+all. Set `LOG_QUERY_TEXT=false` for any deployment handling third-party queries.
+No API key, secret, or exception *message* is ever written -- messages are
+excluded specifically because they can echo the query text this toggle exists to
+protect.
+
+### How it stays off the critical path
+
+The FastAPI handlers are sync `def`, so Starlette runs them in a worker
+threadpool and there is no event loop to await on. Instead the request path only
+does a non-blocking `queue.put_nowait`, and a single daemon thread owns the one
+SQLite connection and performs the inserts. A metrics failure -- a full queue, an
+unopenable database, a bug in the recorder -- is counted, logged, and never
+surfaced to the user. That is covered by tests, not just intent.
+
+Instrumentation is deliberately non-invasive: `instrumented_groq()` is a drop-in
+proxy for `Groq()`, so swapping one line per module captures model/token/latency
+for every call without touching any business logic. Only per-stage timing appears
+inside the pipeline, as `with stage(...)` wrappers around calls that already
+exist. Everything is a no-op outside a request scope, so the CLI entrypoints and
+the eval harness are unaffected.
+
+### Metrics API
+
+Read-only, aggregate-only, on their own router:
+
+| Endpoint | Returns |
+|---|---|
+| `GET /metrics/latency` | p50/p95/p99 total, plus per-stage mean/p95 |
+| `GET /metrics/cost` | total and per-query cost, broken down by model |
+| `GET /metrics/quality` | faithfulness pass-rate, intent distribution, CRAG-retry and fallback rates |
+| `GET /metrics/reliability` | error rate and breakdown by category |
+| `GET /metrics/timeseries` | volume, latency, cost and faithfulness bucketed over time |
+| `GET /metrics/failures` | recent incidents (no exception messages) |
+| `GET /metrics/overview` | all of the above in one round-trip, for the dashboard |
+
+All take `?hours=` and `?include_cached=`. **Cache hits are excluded by default**:
+they run zero LLM calls and return in milliseconds, so including them flatters
+the latency and cost percentiles. Prices live in one place --
+`config.GROQ_PRICING_USD_PER_MTOK` -- because Groq re-prices and retires models on
+a rolling schedule; a model missing from that table is reported as `priced:
+false` rather than silently costing zero.
+
+### Viewing the dashboard
+
+Open the React app and switch to the **Analytics** tab (`npm run dev`, then
+http://localhost:5173). It polls `/metrics/overview` every 30s and shows latency
+percentiles with a per-stage breakdown, cost by model and over time, intent
+distribution, faithfulness trend, error rate and a recent-incident list -- plus
+the health of the telemetry writer itself, since a dashboard that has quietly
+stopped recording otherwise looks identical to a system with no traffic.
+
+## Web frontend (React + TypeScript)
+
+`frontend/` is a React 18 + TypeScript SPA (Vite, Tailwind) that talks to the same
+FastAPI backend the Streamlit app does. Its purpose is to make the pipeline's
+reasoning inspectable rather than hiding it behind a chat box -- this is a
+document-grounded tool, so the evidence is laid out beside the answer, not buried.
+
+<!-- ![ChemSafety Copilot](docs/screenshot.png) -->
+_Screenshot placeholder -- add `docs/screenshot.png`._
+
+What it surfaces, all from fields the backend already returns:
+
+- **Streamed answers** over SSE (`POST /ask/stream`), consumed with `fetch` +
+  a `ReadableStream` reader rather than `EventSource`, which cannot POST a body.
+  The inline `[[report:id:page]]` citation tags the streaming prompt emits are
+  stripped live, with a partially-arrived tag held back rather than flashed.
+- **Intent badge** -- which of the five router intents handled the question,
+  plus the router's own stated reasoning.
+- **Sources panel** -- the report excerpts that actually grounded the answer,
+  with title, section, page range, excerpt, and cross-encoder relevance score
+  (from `data.sources`, see below).
+- **"How this answer was found"** -- the CRAG trace: hybrid dense+BM25 retrieval,
+  HyDE/multi-query expansion, per-chunk grading verdicts, and whether the
+  corrective retry loop fired, with the rewritten query.
+- **Faithfulness status** -- the independent verification pass's result, shown
+  only for the intents that produce one.
+- **SVG diagrams** rendered inline with enlarge/download, parsed and scrubbed of
+  scripts, event handlers, and `javascript:` URLs before injection.
+- **Structured cards** for PubChem property lookups and API 520 sizing results.
+
+### Two backend changes it required
+
+Both additive; neither alters retrieval or generation behaviour.
+
+1. **CORS** (`app/main.py`) -- an explicit origin allowlist for the Vite dev
+   server. The production origin goes in the same list, marked with a comment.
+2. **`data.sources`** (`src/agent/copilot.py`) -- `citations` only carries
+   `(report_id, page)` and `retrieved_chunks` only chunk ids, so neither could
+   back a sources panel showing which report an answer came from and how
+   strongly it matched. `_sources()` projects the `used_chunks` already in
+   memory into citation-grade metadata. `rerank_score` is `null` when
+   `ENABLE_RERANKER=false` -- there is no cross-encoder pass to score with, and
+   the UI renders "score unavailable" rather than a misleading `0.000`.
+
+### Running the React frontend
+
+```powershell
+# Terminal 1 -- backend
+uvicorn app.main:app --reload
+
+# Terminal 2 -- frontend
+cd frontend
+npm install
+copy .env.example .env    # VITE_API_BASE_URL=http://localhost:8000
+npm run dev               # http://localhost:5173
+```
+
+`npm run build` type-checks under `tsc` strict and emits a static bundle to
+`frontend/dist/`. No API keys reach the browser -- every LLM call stays
+server-side behind the FastAPI backend.
+
+`npm test` runs a 19-test Vitest suite over the logic most likely to break
+silently: the SSE reader (replaying a recorded backend stream cut at hostile
+chunk boundaries -- mid-JSON, and between the two newlines of an event
+terminator), the inline citation-tag stripper (asserting no frame of an
+incremental replay ever leaks a raw `[[`), and the diagram-field normaliser.
+
+## Running locally (Streamlit)
+
+The original Streamlit app is still maintained and works unchanged; it is a
+separate client against the same API.
 
 Backend (FastAPI):
 ```powershell
@@ -105,8 +286,8 @@ Frontend (Streamlit), in a second terminal:
 streamlit run app/streamlit_app.py
 ```
 
-The frontend talks to the backend over HTTP (`BACKEND_URL` env var, default
-`http://localhost:8000`) rather than importing the agent in-process. LLM calls
+Both frontends talk to the backend over HTTP (`BACKEND_URL` / `VITE_API_BASE_URL`,
+default `http://localhost:8000`) rather than importing the agent in-process. LLM calls
 (`src/agent/router.py`, `src/generation/crag.py`, `src/generation/generate.py`) go to
 the hosted Groq API rather than a local model -- set `GROQ_API_KEY` in `.env` (get a
 free key at https://console.groq.com/keys).

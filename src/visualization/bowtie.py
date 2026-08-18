@@ -11,14 +11,16 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from groq import Groq
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import GROQ_FAST_MODEL  # noqa: E402
+from src.telemetry.groq_client import instrumented_groq  # noqa: E402
 from src.visualization.causal_chain import extract_causal_chain, generate_causal_chain_svg  # noqa: E402
 
-_client = Groq()
+# Telemetry proxy over Groq(): identical surface, records model/tokens/latency
+# per call into the active request scope. No-op outside one.
+_client = instrumented_groq()
 
 BOWTIE_PROMPT = """Given excerpts from a U.S. Chemical Safety Board (CSB) incident investigation \
 report, determine whether the incident has a clear "bowtie" risk structure: one central critical \

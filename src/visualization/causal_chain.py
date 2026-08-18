@@ -11,13 +11,15 @@ import textwrap
 from pathlib import Path
 from typing import Literal
 
-from groq import Groq
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import GROQ_FAST_MODEL  # noqa: E402
+from src.telemetry.groq_client import instrumented_groq  # noqa: E402
 
-_client = Groq()
+# Telemetry proxy over Groq(): identical surface, records model/tokens/latency
+# per call into the active request scope. No-op outside one.
+_client = instrumented_groq()
 
 CAUSAL_CHAIN_PROMPT = """Given excerpts from a U.S. Chemical Safety Board (CSB) incident investigation \
 report, extract the causal chain of the incident as a short ordered sequence of stages, from root/\

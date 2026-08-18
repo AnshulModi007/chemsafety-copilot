@@ -13,14 +13,17 @@ Each technique attacks a different recall gap:
 import sys
 from pathlib import Path
 
-from groq import Groq
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import GROQ_FAST_MODEL  # noqa: E402
+from src.telemetry.groq_client import instrumented_groq  # noqa: E402
+from src.telemetry.stages import stage  # noqa: E402
 from src.retrieval.retriever import expanded_retrieve  # noqa: E402
 
-_client = Groq()
+# Telemetry proxy over Groq(): identical surface, records model/tokens/latency
+# per call into the active request scope. No-op outside one.
+_client = instrumented_groq()
 
 HYDE_SYSTEM_PROMPT = """You write a short hypothetical excerpt from a U.S. Chemical Safety Board \
 (CSB) incident investigation report that would answer the user's question, in the same factual, \
@@ -90,27 +93,32 @@ def retrieve_with_expansion(query: str, top_k: int = 5, trace: dict | None = Non
     If `trace` is passed, it's filled in-place with the expansion queries and
     HyDE passage actually used, for the CRAG debug trace (see crag.py).
     """
-    expansion_queries: list[str] = []
-    try:
-        expansion_queries.extend(generate_multi_queries(query))
-    except Exception:
-        pass
-    try:
-        expansion_queries.append(generate_step_back_query(query))
-    except Exception:
-        pass
+    # Timed separately from the search itself: these are three LLM round-trips
+    # and the retrieval they feed is vector/BM25 work, so collapsing them into
+    # one "retrieval" number would hide which half is actually slow.
+    with stage("expansion"):
+        expansion_queries: list[str] = []
+        try:
+            expansion_queries.extend(generate_multi_queries(query))
+        except Exception:
+            pass
+        try:
+            expansion_queries.append(generate_step_back_query(query))
+        except Exception:
+            pass
 
-    hyde_passage = None
-    try:
-        hyde_passage = generate_hyde_passage(query)
-    except Exception:
-        pass
+        hyde_passage = None
+        try:
+            hyde_passage = generate_hyde_passage(query)
+        except Exception:
+            pass
 
     if trace is not None:
         trace["expansion_queries"] = expansion_queries
         trace["hyde_passage"] = hyde_passage
 
-    return expanded_retrieve(query, expansion_queries, hyde_passage, top_k=top_k)
+    with stage("retrieval"):
+        return expanded_retrieve(query, expansion_queries, hyde_passage, top_k=top_k)
 
 
 if __name__ == "__main__":

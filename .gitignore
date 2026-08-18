@@ -16,3 +16,8 @@ feedback_log.jsonl
 # Personal working doc used to compare against during early development --
 # superseded by README.md/FAILURE_GALLERY.md, not useful to a repo reader.
 RAG_System_Feature_Reference.docx
+
+# Telemetry database -- contains real user queries when LOG_QUERY_TEXT is on.
+metrics.db
+metrics.db-wal
+metrics.db-shm

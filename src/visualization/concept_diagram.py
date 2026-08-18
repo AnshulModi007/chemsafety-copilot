@@ -17,13 +17,15 @@ import sys
 import textwrap
 from pathlib import Path
 
-from groq import Groq
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import GROQ_FAST_MODEL  # noqa: E402
+from src.telemetry.groq_client import instrumented_groq  # noqa: E402
 
-_client = Groq()
+# Telemetry proxy over Groq(): identical surface, records model/tokens/latency
+# per call into the active request scope. No-op outside one.
+_client = instrumented_groq()
 
 CONCEPT_DIAGRAM_PROMPT = """You decide whether THIS SPECIFIC question warrants an accompanying \
 schematic diagram, and if so extract its labeled components in order.

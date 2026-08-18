@@ -4,16 +4,21 @@ import re
 import sys
 from pathlib import Path
 
-from groq import Groq
 from pydantic import BaseModel, ValidationError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from config import GROQ_FAST_MODEL, GROQ_MODEL, TOP_K  # noqa: E402
+from config import (  # noqa: E402
+    GENERATION_CONTEXT_CHAR_BUDGET, GROQ_FAST_MODEL, GROQ_MODEL, TOP_K,
+)
+from src.telemetry.groq_client import instrumented_groq  # noqa: E402
+from src.telemetry.stages import stage  # noqa: E402
 from src.retrieval.retriever import reranked_retrieve  # noqa: E402
 from src.generation.crag import retrieve_with_crag  # noqa: E402
 from src.tools.websearch import WebSearchUnavailable, web_search  # noqa: E402
 
-_client = Groq()
+# Telemetry proxy over Groq(): identical surface, records model/tokens/latency
+# per call into the active request scope. No-op outside one.
+_client = instrumented_groq()
 
 INSUFFICIENT_RETRIEVAL_MESSAGE = (
     "The retrieved CSB report excerpts do not contain enough information to answer this "
@@ -104,6 +109,11 @@ class FaithfulnessCheck(BaseModel):
 
 
 def check_faithfulness(answer: str, context: str) -> dict:
+    with stage("faithfulness"):
+        return _check_faithfulness(answer, context)
+
+
+def _check_faithfulness(answer: str, context: str) -> dict:
     try:
         response = _client.chat.completions.create(
             model=GROQ_FAST_MODEL,
@@ -201,22 +211,60 @@ def _extract_web_citations(text: str) -> tuple[str, list[dict]]:
     return clean, citations
 
 
-def _build_context(hits: list[dict]) -> str:
-    # Parent-child retrieval: retrieval/reranking already scored the small,
-    # precise `text` window -- generation gets the wider `parent_text` window
-    # instead (falls back to `text` for any hit indexed before this field
-    # existed), so the model has enough surrounding context to answer detail
-    # questions the narrow retrieval window alone would have cut off.
+def _select_context_bodies(hits: list[dict], char_budget: int) -> list[str]:
+    """Choose how much of each chunk to send, within a total character budget.
+
+    Parent-child retrieval scores the small, precise `text` window but hands
+    generation the wider `parent_text` window, so the model can answer detail
+    questions the retrieval window alone would have cut off. Five full parent
+    windows run to ~55k characters, which no longer fits inside a single
+    free-tier request (see GENERATION_CONTEXT_CHAR_BUDGET).
+
+    Degrades in three steps, so quality is only given up when it has to be:
+      1. every parent window, if they all fit;
+      2. otherwise the narrower retrieval windows -- still the text that was
+         actually scored as relevant, just without the surrounding padding;
+      3. otherwise proportional truncation, keeping the head of each chunk and
+         marking the cut so the model does not read a severed sentence as the
+         end of the evidence.
+
+    Chunks are never dropped: losing one entirely would silently remove a
+    citable source, which is worse than shortening all of them.
+    """
+    wide = [hit.get("parent_text", hit["text"]) for hit in hits]
+    if sum(len(body) for body in wide) <= char_budget:
+        return wide
+
+    narrow = [hit["text"] for hit in hits]
+    if sum(len(body) for body in narrow) <= char_budget:
+        return narrow
+
+    if not hits:
+        return []
+    share = max(1, char_budget // len(hits))
+    return [
+        body if len(body) <= share else body[:share].rstrip() + "\n[... excerpt truncated ...]"
+        for body in narrow
+    ]
+
+
+def _build_context(hits: list[dict], char_budget: int = GENERATION_CONTEXT_CHAR_BUDGET) -> str:
+    bodies = _select_context_bodies(hits, char_budget)
     blocks = [
         f'[report_id={hit["report_id"]} title="{hit["report_title"]}" '
         f'section="{hit["section"]}" page={hit.get("parent_page_start", hit["page_start"])}'
-        f'-{hit.get("parent_page_end", hit["page_end"])}]\n{hit.get("parent_text", hit["text"])}'
-        for hit in hits
+        f'-{hit.get("parent_page_end", hit["page_end"])}]\n{body}'
+        for hit, body in zip(hits, bodies)
     ]
     return "\n\n---\n\n".join(blocks)
 
 
 def generate_from_hits(query: str, hits: list[dict], max_retries: int = 2) -> dict:
+    with stage("generation"):
+        return _generate_from_hits(query, hits, max_retries)
+
+
+def _generate_from_hits(query: str, hits: list[dict], max_retries: int = 2) -> dict:
     context = _build_context(hits)
     user_prompt = f"Report excerpts:\n\n{context}\n\nQuestion: {query}"
 
@@ -255,6 +303,11 @@ def _build_web_context(results: list[dict]) -> str:
 
 
 def generate_from_web(query: str, web_results: list[dict], max_retries: int = 2) -> dict:
+    with stage("generation"):
+        return _generate_from_web(query, web_results, max_retries)
+
+
+def _generate_from_web(query: str, web_results: list[dict], max_retries: int = 2) -> dict:
     context = _build_web_context(web_results)
     user_prompt = f"Web search results:\n\n{context}\n\nQuestion: {query}"
 
@@ -318,6 +371,11 @@ def generate_general_knowledge(query: str) -> dict:
     nothing to ground this in. Always clearly disclaimed as ungrounded (see
     GENERAL_KNOWLEDGE_SYSTEM_PROMPT) so it doesn't read with the same
     authority as the RAG-grounded answers."""
+    with stage("generation"):
+        return _generate_general_knowledge(query)
+
+
+def _generate_general_knowledge(query: str) -> dict:
     response = _client.chat.completions.create(
         model=GROQ_MODEL,
         messages=[
@@ -332,7 +390,8 @@ def _web_fallback(query: str) -> dict | None:
     """None means web search wasn't available or returned nothing -- caller
     should fall back to the plain refusal message rather than error out."""
     try:
-        web_results = web_search(query)
+        with stage("web_search"):
+            web_results = web_search(query)
     except WebSearchUnavailable:
         return None
     if not web_results:
@@ -392,12 +451,19 @@ def generate_with_crag(query: str, top_k: int = TOP_K, max_retries: int = 2) -> 
 # a failed response, so this is an acceptable one-shot tradeoff.
 
 def _stream_chat(model: str, messages: list[dict]):
-    """Yields raw text deltas from a Groq streaming chat completion."""
-    stream = _client.chat.completions.create(model=model, messages=messages, stream=True)
-    for chunk in stream:
-        delta = chunk.choices[0].delta.content
-        if delta:
-            yield delta
+    """Yields raw text deltas from a Groq streaming chat completion.
+
+    The stage spans the yields deliberately: for a streamed answer the figure
+    worth recording is time-to-fully-stream, not time-to-first-token. Timing
+    every streaming generator here rather than in each of the three callers
+    keeps the instrumentation to one place.
+    """
+    with stage("generation"):
+        stream = _client.chat.completions.create(model=model, messages=messages, stream=True)
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
 
 
 def generate_from_hits_stream(query: str, hits: list[dict]):

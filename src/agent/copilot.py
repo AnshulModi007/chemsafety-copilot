@@ -23,6 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from src.agent import semantic_cache  # noqa: E402
 from src.agent.router import classify_intent, extract_psv_params, reformulate_query  # noqa: E402
+from src.telemetry.stages import note_intent, stage  # noqa: E402
 from src.generation.crag import retrieve_with_crag  # noqa: E402
 from src.generation.generate import (  # noqa: E402
     GENERAL_KNOWLEDGE_DISCLAIMER, _web_fallback, generate_from_hits, generate_from_hits_stream,
@@ -52,6 +53,39 @@ def _mean_rerank_score(chunks: list[dict]) -> float:
     return round(sum(scores) / len(scores), 3) if scores else 0.0
 
 
+SOURCE_SNIPPET_CHARS = 400
+
+
+def _sources(chunks: list[dict]) -> list[dict]:
+    """Citation-grade metadata for the chunks that actually grounded an answer.
+
+    `citations` only carries (report_id, page) and `retrieved_chunks` only
+    carries chunk ids, so neither alone can back a sources panel showing which
+    report an answer came from and how strongly it matched. This projects the
+    `used_chunks` already in memory into a flat, JSON-safe shape for the API --
+    a presentation concern, not a retrieval one, so nothing upstream changes.
+
+    rerank_score is None whenever ENABLE_RERANKER is off (see config.py): there
+    is no cross-encoder pass to score with, and callers must render "no score"
+    rather than a misleading 0.0.
+    """
+    return [
+        {
+            "chunk_id": c["chunk_id"],
+            "report_id": c["report_id"],
+            "report_title": c["report_title"],
+            "section": c["section"],
+            "chemical": c.get("chemical"),
+            "year": c.get("year"),
+            "page_start": c["page_start"],
+            "page_end": c["page_end"],
+            "rerank_score": c.get("rerank_score"),
+            "snippet": c["text"][:SOURCE_SNIPPET_CHARS],
+        }
+        for c in chunks
+    ]
+
+
 def _report_title_from_chunks(chunks: list[dict]) -> str | None:
     """The most common report_title among a set of chunks -- used as a
     diagram caption when a single incident's chunks are available."""
@@ -66,7 +100,8 @@ def _safe_incident_diagram(query: str, used_chunks: list[dict]) -> dict | None:
     if not used_chunks:
         return None
     try:
-        diagram = get_incident_diagram(query, used_chunks, title=_report_title_from_chunks(used_chunks))
+        with stage("diagram"):
+            diagram = get_incident_diagram(query, used_chunks, title=_report_title_from_chunks(used_chunks))
     except Exception:
         logger.warning("incident diagram generation failed", exc_info=True)
         return None
@@ -80,8 +115,9 @@ def _safe_concept_diagram(query: str, answer: str) -> str | None:
     judged necessary for this answer (most general_knowledge answers won't
     get one -- see extract_concept_diagram's diagram_needed judgment)."""
     try:
-        diagram = extract_concept_diagram(query, answer)
-        svg = generate_concept_diagram_svg(diagram) if diagram else None
+        with stage("diagram"):
+            diagram = extract_concept_diagram(query, answer)
+            svg = generate_concept_diagram_svg(diagram) if diagram else None
     except Exception:
         logger.warning("concept diagram generation failed", exc_info=True)
         return None
@@ -94,11 +130,13 @@ def _handle_historical(query: str) -> dict:
     auto-generated incident diagram (bowtie, falling back to a causal-chain
     flowchart) attached when the answer is grounded in real report chunks."""
     result = generate_with_crag(query)
-    diagram = _safe_incident_diagram(query, result.get("used_chunks", []))
+    used_chunks = result.get("used_chunks", [])
+    diagram = _safe_incident_diagram(query, used_chunks)
     return {
         "answer": result["answer"],
         "data": {
             "citations": result["citations"],
+            "sources": _sources(used_chunks),
             "retrieved_chunks": result["retrieved_chunks"],
             "crag_insufficient": result["crag_insufficient"],
             "crag_rewritten_query": result["crag_rewritten_query"],
@@ -144,6 +182,7 @@ def _handle_comparative(query: str, sub_queries: list[str]) -> dict:
                 "answer": web_result["answer"],
                 "data": {
                     "citations": web_result["citations"],
+                    "sources": [],  # web-sourced -- citations carry title/url instead
                     "retrieved_chunks": [],
                     "crag_insufficient": True,
                     "sub_queries": sub_queries,
@@ -160,7 +199,7 @@ def _handle_comparative(query: str, sub_queries: list[str]) -> dict:
                 "retrieved report excerpts, even after per-incident retrieval and query rewriting."
             ),
             "data": {
-                "citations": [], "retrieved_chunks": [], "crag_insufficient": True,
+                "citations": [], "sources": [], "retrieved_chunks": [], "crag_insufficient": True,
                 "sub_queries": sub_queries, "source": "insufficient", "confidence": 0.0,
                 "trace": trace, "faithfulness": None, "diagram": None,
             },
@@ -173,6 +212,7 @@ def _handle_comparative(query: str, sub_queries: list[str]) -> dict:
         "answer": result["answer"],
         "data": {
             "citations": result["citations"],
+            "sources": _sources(used_chunks),
             "retrieved_chunks": result["retrieved_chunks"],
             "crag_insufficient": any_insufficient,
             "sub_queries": sub_queries,
@@ -211,7 +251,8 @@ def _handle_chemical_property(chemical_name: str | None) -> dict:
             "data": {},
         }
     try:
-        props = get_compound_properties(chemical_name)
+        with stage("tool_call"):
+            props = get_compound_properties(chemical_name)
     except CompoundNotFound as e:
         return {"answer": str(e), "data": {}}
     except PubChemUnavailable as e:
@@ -270,7 +311,8 @@ def _handle_calculation(query: str) -> dict:
         kwargs["compressibility_z"] = params.compressibility_z
 
     try:
-        result = calculations.size_psv_vapor(**kwargs)
+        with stage("tool_call"):
+            result = calculations.size_psv_vapor(**kwargs)
     except ValueError as e:
         logger.info("PSV sizing rejected invalid input: %s", e)
         return {
@@ -319,11 +361,15 @@ def ask(query: str, history: list[dict] | None = None) -> dict:
     """Classify intent, dispatch to the matching tool, and return a single
     response envelope: {query, resolved_query, intent, routing_reasoning,
     from_cache, answer, data}. See stream_ask for the token-streaming twin."""
-    resolved_query = reformulate_query(query, history or [])
-    decision = classify_intent(resolved_query)
+    with stage("reformulate"):
+        resolved_query = reformulate_query(query, history or [])
+    with stage("routing"):
+        decision = classify_intent(resolved_query)
+    note_intent(decision.intent)
     logger.info("routed intent=%s reasoning=%s", decision.intent, decision.reasoning)
 
-    cached = semantic_cache.get_cached(resolved_query, decision.intent)
+    with stage("cache_lookup"):
+        cached = semantic_cache.get_cached(resolved_query, decision.intent)
     if cached is not None:
         logger.info("served from semantic cache")
         return {
@@ -358,7 +404,11 @@ def ask(query: str, history: list[dict] | None = None) -> dict:
         "from_cache": False,
         **result,
     }
-    semantic_cache.store(resolved_query, decision.intent, response)
+    # Staged because storing embeds the query, and on the first call of a
+    # process that includes loading the embedding model -- which showed up as
+    # several unexplained seconds in the latency dashboard otherwise.
+    with stage("cache_store"):
+        semantic_cache.store(resolved_query, decision.intent, response)
     return response
 
 
@@ -376,11 +426,13 @@ def _handle_historical_stream(query: str):
         if kind == "delta":
             yield ("delta", payload)
         else:
-            diagram = _safe_incident_diagram(query, payload.get("used_chunks", []))
+            used_chunks = payload.get("used_chunks", [])
+            diagram = _safe_incident_diagram(query, used_chunks)
             yield ("done", {
                 "answer": payload["answer"],
                 "data": {
                     "citations": payload["citations"],
+                    "sources": _sources(used_chunks),
                     "retrieved_chunks": payload["retrieved_chunks"],
                     "crag_insufficient": payload["crag_insufficient"],
                     "crag_rewritten_query": payload["crag_rewritten_query"],
@@ -425,7 +477,7 @@ def _handle_comparative_stream(query: str, sub_queries: list[str]):
                     yield ("done", {
                         "answer": payload["answer"],
                         "data": {
-                            "citations": payload["citations"], "retrieved_chunks": [],
+                            "citations": payload["citations"], "sources": [], "retrieved_chunks": [],
                             "crag_insufficient": True, "sub_queries": sub_queries,
                             "source": "web", "confidence": 0.0, "trace": trace,
                             "faithfulness": payload.get("faithfulness"), "diagram": None,
@@ -439,7 +491,7 @@ def _handle_comparative_stream(query: str, sub_queries: list[str]):
                 "retrieved report excerpts, even after per-incident retrieval and query rewriting."
             ),
             "data": {
-                "citations": [], "retrieved_chunks": [], "crag_insufficient": True,
+                "citations": [], "sources": [], "retrieved_chunks": [], "crag_insufficient": True,
                 "sub_queries": sub_queries, "source": "insufficient", "confidence": 0.0,
                 "trace": trace, "faithfulness": None, "diagram": None,
             },
@@ -456,6 +508,7 @@ def _handle_comparative_stream(query: str, sub_queries: list[str]):
                 "answer": payload["answer"],
                 "data": {
                     "citations": payload["citations"],
+                    "sources": _sources(used_chunks),
                     "retrieved_chunks": payload["retrieved_chunks"],
                     "crag_insufficient": any_insufficient,
                     "sub_queries": sub_queries,
@@ -491,12 +544,16 @@ def stream_ask(query: str, history: list[dict] | None = None):
     exactly one ("done", response) tuple with the same envelope shape ask()
     returns.
     """
-    resolved_query = reformulate_query(query, history or [])
-    decision = classify_intent(resolved_query)
+    with stage("reformulate"):
+        resolved_query = reformulate_query(query, history or [])
+    with stage("routing"):
+        decision = classify_intent(resolved_query)
+    note_intent(decision.intent)
     logger.info("routed intent=%s reasoning=%s", decision.intent, decision.reasoning)
     yield ("routing", {"intent": decision.intent, "reasoning": decision.reasoning})
 
-    cached = semantic_cache.get_cached(resolved_query, decision.intent)
+    with stage("cache_lookup"):
+        cached = semantic_cache.get_cached(resolved_query, decision.intent)
     if cached is not None:
         logger.info("served from semantic cache")
         yield ("done", {
@@ -543,7 +600,11 @@ def stream_ask(query: str, history: list[dict] | None = None):
         "from_cache": False,
         **result,
     }
-    semantic_cache.store(resolved_query, decision.intent, response)
+    # Staged because storing embeds the query, and on the first call of a
+    # process that includes loading the embedding model -- which showed up as
+    # several unexplained seconds in the latency dashboard otherwise.
+    with stage("cache_store"):
+        semantic_cache.store(resolved_query, decision.intent, response)
     yield ("done", response)
 
 

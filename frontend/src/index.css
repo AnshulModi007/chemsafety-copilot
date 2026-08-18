@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    /* Faint drafting grid on the vellum. At 3% opacity it is felt rather than
+       seen -- enough to make the ground read as engineering paper instead of
+       flat grey, not enough to compete with a column of report text. */
+    background-image:
+      linear-gradient(to right, rgba(20, 33, 43, 0.03) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(20, 33, 43, 0.03) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* Numeric columns -- rerank scores, page ranges, PSV values, every metric on
+     the analytics page -- only align with tabular figures. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-signal ring-offset-2 ring-offset-paper;
+  }
+
+  ::selection {
+    background-color: #cfe3f0;
+  }
+}
+
+@layer components {
+  .hairline {
+    @apply border-rule;
+  }
+
+  /* Raised surfaces sit on the vellum as sheets on a drafting table. */
+  .sheet {
+    @apply rounded-sm border hairline bg-paper-raised shadow-sheet;
+  }
+
+  /* Small uppercase eyebrow, used for every field label and panel heading.
+     Plex Sans holds tracking at this size where a fallback grotesque muddies. */
+  .eyebrow {
+    @apply text-[0.6875rem] font-semibold uppercase tracking-[0.11em] text-ink-faint;
+  }
+
+  .answer-prose {
+    @apply prose prose-slate max-w-none font-serif text-[1.0625rem] leading-[1.72] text-ink;
+  }
+
+  .answer-prose :where(a) {
+    @apply text-signal underline decoration-signal/35 underline-offset-2;
+  }
+
+  .answer-prose :where(a):hover {
+    @apply decoration-signal;
+  }
+
+  .answer-prose :where(code) {
+    @apply rounded-[3px] bg-paper-sunken px-1 py-px font-mono text-[0.85em] before:content-none after:content-none;
+  }
+
+  .answer-prose :where(h1, h2, h3, h4) {
+    @apply font-sans font-semibold tracking-tight text-ink;
+  }
+
+  .answer-prose :where(strong) {
+    @apply font-semibold text-ink;
+  }
+
+  /* Report excerpts and quoted findings get a blueprint edge, echoing the
+     change bars in the margin of a revised engineering drawing. */
+  .answer-prose :where(blockquote) {
+    @apply border-l-2 border-signal/40 not-italic text-ink-muted;
+  }
+}
+
+/* The streaming caret: present only while tokens are arriving. */
+@keyframes caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0.15;
+  }
+}
+
+.streaming-caret::after {
+  content: '';
+  display: inline-block;
+  width: 0.45ch;
+  height: 1.05em;
+  margin-left: 0.12em;
+  vertical-align: -0.15em;
+  background-color: #14608f;
+  animation: caret 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .streaming-caret::after {
+    animation: none;
+  }
+}

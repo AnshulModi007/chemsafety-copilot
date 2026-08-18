@@ -9,15 +9,18 @@ import sys
 from pathlib import Path
 from typing import Literal
 
-from groq import Groq
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from config import GROQ_FAST_MODEL, PROCESSED_DIR, TOP_K  # noqa: E402
+from src.telemetry.groq_client import instrumented_groq  # noqa: E402
+from src.telemetry.stages import stage  # noqa: E402
 from src.retrieval.retriever import reranked_retrieve  # noqa: E402
 from src.retrieval.query_expansion import retrieve_with_expansion  # noqa: E402
 
-_client = Groq()
+# Telemetry proxy over Groq(): identical surface, records model/tokens/latency
+# per call into the active request scope. No-op outside one.
+_client = instrumented_groq()
 
 # Deterministic backstop for failure gallery case #3: the LLM grader, even
 # shown report_title/chemical metadata, still rates a wrong-incident chunk
@@ -264,7 +267,8 @@ def retrieve_with_crag(query: str, top_k: int = TOP_K, max_retries: int = 1) -> 
             record["expansion_queries"] = expansion_meta.get("expansion_queries", [])
             record["hyde_passage"] = expansion_meta.get("hyde_passage")
         else:
-            chunks = reranked_retrieve(current_query, top_k=top_k)
+            with stage("retrieval"):
+                chunks = reranked_retrieve(current_query, top_k=top_k)
             record["retrieval_method"] = "plain_rerank"
 
         confident = [
@@ -287,7 +291,8 @@ def retrieve_with_crag(query: str, top_k: int = TOP_K, max_retries: int = 1) -> 
 
         # Always grade against the original question -- a rewritten query is
         # a better *search* string, but relevance is judged against user intent.
-        grades = {g.chunk_index: g for g in grade_chunks(query, chunks)}
+        with stage("crag_grading"):
+            grades = {g.chunk_index: g for g in grade_chunks(query, chunks)}
 
         for i, c in enumerate(chunks):
             g = grades.get(i)
@@ -314,7 +319,8 @@ def retrieve_with_crag(query: str, top_k: int = TOP_K, max_retries: int = 1) -> 
             }
 
         if attempt < max_retries:
-            current_query = rewrite_query(query)
+            with stage("crag_grading"):
+                current_query = rewrite_query(query)
             rewritten_query = current_query
 
     return {
